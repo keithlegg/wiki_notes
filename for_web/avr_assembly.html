@@ -1,0 +1,653 @@
+
+
+==Prologue==
+<pre>
+The best things in life take work. The things you work harder for have the biggest pay-off.
+Hell, its easier than machine code!
+</pre>
+
+==Toolchain==
+<pre>
+AVRstudio works fine, but I want linux and open source!!!
+
+As it turns out, it is just as easy to develop assembly code in a GCC environment as it is in C.
+You just invoke a slighlty different command to AVR-GCC toolchain. 
+</pre>
+
+This is how you compile your C code without a makefile
+<pre>
+ avr-gcc -DF_CPU=16000000UL -mmcu=atmega164p -o blink.out blink.c 
+ avr-objcopy -O ihex -R .eeprom blink.out blink.hex
+ avrdude -V -c usbtiny -p atmega164p -b 19200 -P /dev/cuaU0 -U flash:w:blink.hex
+</pre>
+
+If you add "-S" you can see the assembly generated, then send it to your MCU as usual 
+<pre>
+#You can output an assembly file to see what the compiler is doing
+avr-g++ -S -DF_CPU=16000000UL -mmcu=atmega164p -o blink.S blink.c
+
+#You can use gcc to compile your asm code. Use -c for compilation like this:
+avr-g++ -DF_CPU=16000000UL -mmcu=atmega2560 -c blink.S -o blink.o
+
+#This will give object code file blink.o. To invoke linker:
+gcc blink.o -o blink
+</pre>
+
+Thats all there is to it! Simply specify a .S file and Bob's yer uncle
+<pre>
+#----># avr-g++ -DF_CPU=16000000UL -mmcu=atmega2560 -c (MYASSEMBLYFILETOASSEMBLE).S -o name.o
+</pre>
+
+Here is a simple shell script that works to assemble and send the code to your device
+<pre>
+avr-gcc -Wall -Os -DF_CPU=20000000UL -mmcu=atmega324p -o vga.o vga.S
+avr-objcopy -j .text -j .data -O ihex vga.o vga.hex
+avrdude -V -c usbtiny -p atmega324p -b 19200 -U flash:w:vga.hex
+</pre>
+
+you can see the error messages if you add a "2>&1" to the end of the file
+<pre>
+avr-gcc -Wall -Os -DF_CPU=20000000UL -mmcu=atmega324p -o vga.o ./asm/vga2.S 2>&1
+</pre>
+
+==General Assembly notes==
+<pre>
+complex expressions never result in more than a single machine instruction (contrast to high level compiled language)
+
+literals are bit patterns expressed as decimal, hex, octal, binary, string, or char
+
+When your asm code starts all program and data is in flash. There is nothing in SRAM.
+EEPROM is slow and best used only for non volatile configuration data 
+
+The .dseg counter defaults to RAMSTART (0x60 or 0x100).
+
+.org 0000 - defaults to .cseg
+all segments (.cseg, .dseg, .eseg) have their location counters default to 0x0000
+
+code flash, RAM and EEPROM all have their own location 0x0000 and address 0x1234 in flash is not the same as 0x1234 in RAM which is not the same as 0x1234 in EEPROM.
+
+you tell it where the "next bit" is going to be destined and which location counter to carry on counting up by using .cseg, .dseg or .eseg. 
+You can reposition one of those three location counters by switching to it's memory segment with .cseg, .desg, eseg and then use .org to affect the currently selected location counter. 
+
+</pre>
+
+==Macros/built ins/common tricks==
+<pre>
+BV() - bit value - look in avr/sfr_defs.h
+
+#define _BV(bit) (1 << (bit))  
+#define LO(x) ((x) & 0xFF) 
+#define HI(x) ((x)>>8) 
+
+</pre>
+
+==Include other assembly files==
+Place this in the location where the assembler needs it, not at the top like in C
+<pre>
+#include "foo.S"
+</pre>
+
+
+==Memory Map/ Chip Layout==
+//From // https://en.wikipedia.org/wiki/Atmel_AVR_instruction_set
+<pre>
+A typical ATmega memory map may look like:
+Data address 	I/O address 	Contents
+0x0000 – 0x001F 		Registers R0 – R31
+0x0020 – 0x003F 0x00 – 0x1F 	I/O registers (bit-addressable)
+0x0040 – 0x005F 0x20 – 0x3F 	I/O registers (not bit-addressable)
+0x0060 – 0x00FF 		Extended I/O registers (memory-mapped I/O only)
+0x0100 – RAMEND 		Internal SRAM
+</pre>
+
+==Special Registers==
+<pre>
+In addition to these 32 general-purpose registers, the CPU has a few special-purpose registers:
+
+    PC   : 16- or 22-bit program counter
+
+    SP   : 8- or 16-bit stack pointer
+
+    SREG : 8-bit status register
+ 
+    "Virtual" 16bit registers made up of 2X8 bit registers   
+    Z is r30 & r31  - register is made of ZL & ZH 
+    Y is r28 & r29  - etc
+    X is r26 & r27  - etc
+
+    RAMPX, RAMPY, RAMPZ
+       Registers concatenated with the X, Y and Z registers enabling indirect addressing of the whole data space
+       on MCUs with more than 64K bytes data space, and constant data fetch on MCUs with more than 64K bytes 
+       program space. (extra 8 bits of addressing to the 16 make 24 bit addressing )
+
+    RAMPD
+        Register concatenated with the Z register enabling direct addressing of the whole data space on MCUs 
+        with more than 64K bytes data space.
+
+    Stack
+        STACK:Stack for return address and pushed registers
+        SP:Stack Pointer to STACK
+
+</pre>
+
+
+===Stack Pointer===
+<pre>
+The stack pointer is a 16-bit-pointer, accessible like a
+port
+</pre>
+
+<pre>
+This will set the stack pointer to the end of your memory
+Top of RAM is traditionally where a STACK is setup so that it will grow DOWN in memory.
+As you write your program it will grow in size UPWARD.
+As long as you don't write any run-away recursion routines,etc the two should not collide.
+SPL and SPH are your stack pointer that will get incremented or decremented everytime
+you use the stack, like during an RCALL/CALL & RET
+
+ldi		accum,LO(RAMEND)
+out		SPL,accum
+ldi		accum,HI(RAMEND)
+out		SPH,accum
+</pre>
+
+===Status register===
+
+<pre>
+    the most often used port is the status register
+    in a few cases it is possible to manipulate these bits directly (using the assembler instructions SEx or CLx, where x is the bit abbreviation)
+
+</pre>
+
+<pre>
+    I -Interrupt flag. Set when interrupts are enabled.
+    T -Bit copy. Special bit load and bit store instructions use this bit.
+    H -Half carry. This is an internal carry from additions and is used to support BCD arithmetic.
+    S -Sign flag. Unique to AVR, this is always N⊕V, and shows the true sign of a comparison.
+    V -Overflow flag. Set in case of two's complement overflow.
+    N -Negative flag. Set to a copy of the most significant bit of an arithmetic result.
+    Z -Zero flag. Set to 1 when an arithmetic result is zero.
+    C -Carry flag. This is a borrow flag on subtracts.
+</pre>
+
+===The stack===
+ stack space is part of SRAM, SRAM is shared between .data sections and the stack
+ stack collision is when data fills up stack 
+ stack grows downwards, stack pointer points at a location below
+ when data popped from stack, the stack pointer is incremented
+ when data pushed from stack, the stack pointer is decremented
+ used for storing return addresses,registers that need to be preserved while some code is changing them
+
+==Notes on SRAM/Memory map/etc==
+<pre>
+ SRAM_START|HEAP==>|never the twain shall meet!|<==STACK|RAMEND
+</pre>
+
+<pre>
+http://www.nongnu.org/avr-libc/user-manual/malloc.html
+</pre>
+
+<pre>
+SRAM are memories that are not directly accessible to the central processing unit 
+(Arithmetic and Logical Unit ALU, sometimes called accumulator) like the registers are. 
+If you access these memory locations you usually use a register as interim storage.
+</pre>
+
+<pre>
+To copy a value to a memory location in SRAM you have to define the address. 
+STS 0x0060, R1
+
+the content of register R1 is copied to the first SRAM location With
+LDS R1, 0x0060
+
+the SRAM content at address 0x0060 is copied to the register. 
+This is the direct access with an address that has to be defined by the programmer.
+</pre>
+
+
+=== XYZ - Pointer addressing ===
+you can access SRAM with pointers with a 16bit address. 
+There are special paired 8X2 byte registers for that purpose called X,Y, and Z
+
+<pre>
+//http://www.avr-asm-tutorial.net/avr_en/beginner/REGISTER.html
+
+register pairs R26:R27, R28:R29 and R30:R31 have extra names in assembler: X, Y and Z. 
+These pairs are 16-bit pointer registers
+The lower byte of the 16-bit-adress is located in the lower register, the higher byte in the upper register. 
+
+.EQU Adress = RAMEND ; RAMEND is the highest 16-bit adress in SRAM
+   LDI YH,HIGH(Adress) ; Set the MSB
+   LDI YL,LOW(Adress) ; Set the LSB
+
+Accesses via pointers are programmed with specially designed commands. 
+Read access is named LD (LoaD), write access named ST (STore), e.g. with the X-pointer:
+
+Pointer	Sequence	                                                                Example
+X	Read/Write from address X, don't change the pointer 	                        LD R1,X
+                                                                                        ST X,R1
+X+	Read/Write from/to address X and increment the pointer afterwards by one	LD R1,X+
+                                                                                        ST X+,R1
+-X	Decrement the pointer by one and read/write from/to the new address afterwards	LD R1,-X
+                                                                                        ST -X,R1
+
+</pre>
+
+Simple use of X pointer to store byte into SRAM
+<pre>
+foo:
+    //set 16 bit address for sram 
+    ldi XL, 0x02
+    ldi XH, 0x04
+    //prepare a byte to load into sram 
+    ldi accum, 0xaa
+    //load byte into sram 
+    st X, accum
+    //clear buffer just to prove it is working 
+    clr accum
+    //load byte back from sram into buffer
+    ld accum, X
+    //display byte 
+    sts PORTF, r16 
+    rjmp foo
+</pre>
+
+
+Demo to see that X+ in fact does iterate the pointer
+<pre>
+foo:
+    //set 16 bit address for sram 
+    ldi XL, 0x02
+    ldi XH, 0x04
+
+    ldi r20, 10 
+    rjmp bar
+bar:
+  
+    //prepare a byte to load into sram 
+    ldi accum, 0xaa
+    //load byte into sram AND ITERATE the X pointer
+    st X+, accum
+    mov accum, XL 
+    //display byte showing copy of XL byte  
+    sts PORTF, accum 
+
+    dec r20
+    brne bar
+    ret
+</pre>
+
+
+
+You can see the locations of things using "address of" operator
+<pre>
+ char var_1 = 1; 
+ // print out its address, which is 16 bits unsigned 
+ Serial.print( (uint16_t) &var_1, HEX); 
+</pre>
+
+avr-nm lists  the symbols from object files 
+<pre>
+avr-nm --size-sort -Crtd blink.elf
+</pre>
+
+
+<pre>
+???           -  .init3
+???           -  .noinit - part of the .bss section
+???           -  .initN  - used to define the startup code from reset up through the start of main(). - subparts of .text section.
+???           -  .finiN  - used to define the exit code executed after return from main()             - subparts of .text section.
+???           -  .bss - Uninitialized global or static variables 
+???           -       - I/O Space    - Ports, Timers, Configuration registers 
+code segments - .cseg - program space - flash
+data segments - .dseg - code space    - sram
+eeprom        - .eseg - duh
+</pre>
+
+==Machine Internals==
+===status register manipulation ===
+<pre>
+bset    - Bit Set in SREG
+brbs    - Branch if Bit in SREG is Set
+bclr    - Bit Clear in SREG
+
+</pre>
+
+===stack manipulation ===
+<pre>   
+ http://www.avr-tutorials.com/general/avr-microcontroller-stack-operation-and-stack-pointer
+</pre>
+
+<pre>
+tweak stack pointer
+
+tweak program counter
+
+tweak status register
+
+</pre>
+
+==assembler directives==
+<pre>
+.byte - reserves memory resources in the SRAM or EEPROM. 
+    In order to be able to refer to the reserved location, the BYTE directive should be preceded by a label. 
+    The directive takes one parameter, which is the number of bytes to reserve
+
+</pre>
+
+
+==Bit Shifting/masks/manipulations==
+<pre>
+ASR - Arithmetic Shift Right, Shifts all bits in Rd one place to the right. 
+    Bit 7 is held constant. Bit 0 is loaded into the C flag of the SREG. 
+    This operation effectively divides a signed value by two without changing its sign. 
+    The carry flag can be used to round the result.
+
+LSR - Logical Shift Right, Shifts all bits in Rd one place to the right. 
+     Bit 7 is cleared. Bit 0 is loaded into the C flag of the SREG. 
+     This operation effectively divides an unsigned value by two. The C flag can be used to round the result.
+
+LSL - Logical Shift Left,Shifts all bits in Rd one place to the left. 
+      Bit 0 is cleared. Bit 7 is loaded into the C flag of the SREG. 
+      This operation effectively multiplies signed and unsigned values by two.
+ 
+AND - logical AND between the contents of register Rd and register Rr
+OR  - logical OR  between the contents of register Rd and register Rr
+EOR - logical XOR between the contents of register Rd and register Rr
+
+</pre>
+
+==common instructions==
+<pre>
+"Immediate" can not be used with r0-r15 (stack decrements DOWN from RAMEND!) 
+http://www.atmel.com/webdoc/avrassembler/avrassembler.wb_SBIC.html
+http://www.avr-asm-tutorial.net/avr_en/beginner/COMMANDS.html#Functions
+</pre>
+
+===Basics===
+<pre>
+org   - set program origin
+
+.equ  - Set a symbol equal to an expression, very similar to C-language #define (but equ can't be redefined.)
+.def  - Define a symbolic name on a register
+
+set   - Set a symbol to an expression
+
+ret   - return subroutine, return address is loaded from the stack.
+reti  - return interrupt
+</pre>
+
+<pre>
+cbi   - Clear Bit in I/O Register - (bit off)
+sbi   - Set Bit in I/O Register   - (bit on) 
+sbic  - skip if bit in I/O register is cleared
+
+
+in    - in from I/O location (status register in I/O)
+out   - output to an IO register 
+push  - push register on stack
+pop   - pop register from stack
+
+ld    - Load Indirect from Data Space to Register using Index X,Y,Z
+lds   - Loads one byte from the data space to a register. For chips with SRAM, the data space consists of the register file
+ldi   - load immediate (only on registers r16-r32!)
+lpm   - load program memory - Loads one byte pointed to by the Z register into the destination register Rd.
+st    - Store Indirect From Register to Data Space using Index X,Y,Z
+sts   - store direct to data space, similar to "out" but works beyond low I/O registers (ex. 00-3F).(READ DATASHEET!)  
+
+mov   - makes a copy of one register into another. Ex : mov r16,r0 ; Copy r0 to r16
+cp    - compare (two registers)
+cpc   - compare with carry (upper byte of virtual 16 bit register?)
+        ; Compare r3:r2 with r1:r0
+        cp r2,r0 ; Compare low byte
+        cpc r3,r1 ; Compare high byte
+
+cpi   - compare values (register and constant)
+</pre>
+
+===Jumps/Function calls===
+<pre>
+rcall - relative call - "remembers" where it jumped from with the stack, so that the "ret" instruction can go back there (gosub)
+rjmp  - relative jump - jumps to a label (goto) , does not use stack ,  takes less code space than JMP
+        Relative jump can jump +-2k words from current position
+jmp   - absolute jump. jump anywhere into 64k word program memory
+ijmp  - indirect jump - uses the value stored in the ZL,ZH register pair as destination address
+eijmp - extended ijmp - only relevant for devices with more than 128K
+</pre>
+
+===Branching===
+<pre>
+brlo  - branch
+brcc  - branch if carry cleared
+brcs  - Branch if carry set - branches relatively to PC in either direction
+brbs  - Branch if Bit in SREG is Set
+sbrs  - Skip if Bit in Register is Set -  tests a single bit in a register and skips the next instruction if the bit is set.
+sbic  - Skip if Bit in I/O Register is Cleared -  tests a single bit in an I/O register and skips the next instruction if the bit is cleared 
+</pre>
+
+=== Math===
+
+<pre>
+The AVR has no divide instruction so you must do the division in a software routine.
+You can multiply by adding in a loop
+You can divide by subtracting in a loop
+</pre>
+
+<pre>
+inc   - increment by one (in a loop usually) 
+adiw  - add immediate to word (pseudo 16-bit, increment 2 paired 8 bit buffers)
+add   - add (register to register)
+sub   - subtract (register to register)
+subi  - subtract immediate (register to constant)
+mul   - multiply unsigned, multiplicand Rd + multiplier Rr are two registers containing unsigned numbers. 
+        The 16-bit unsigned product is placed in R1 (high byte) and R0 (low byte)
+muls  - multiply signed 
+</pre>
+
+<pre>
+</pre>
+
+Example of 16 bit register math 
+<pre>
+    ldi ZL, 0xaa
+    ldi ZH, 0x04   
+    adiw r30, 1 
+    mov accum, ZL 
+    sts PORTF, accum  //display byte showing copy of ZL byte 
+</pre>
+
+
+
+==Code samples==
+
+===Blink example ===
+
+simplest assembly program
+<pre>
+#define __SFR_OFFSET 0	
+#include <avr/io.h>
+.global main
+main:
+    ldi r16,0xff
+    out DDRB,r16
+    rcall Start
+
+Start:
+    ldi r16,0xff
+    out PORTB,r16
+    
+    ldi r16,0x00
+    out PORTB,r16
+    rjmp Start
+</pre>
+
+===Blink example 2 ===
+with macros
+<pre>
+ldi  temp, 0b00100000
+out  DDRB, temp
+
+MAIN:
+   sbi  PortB, 5
+   cbi  PortB, 5
+   rjmp MAIN
+</pre>
+
+===UART example===
+<pre>
+
+//NOTICE SIMILARITY WITH C CODE - DIFFERENT LANGUAGE BUT EXACT SAME REGISTERS
+
+#define __SFR_OFFSET 0     // Needed to keep io.h from adding an incorrect offset to our port addresses
+#include <avr/io.h>
+
+
+#define LO(x) ((x) & 0xFF) 
+#define HI(x) ((x)>>8) 
+
+#define accum r16
+
+
+.equ   baud, 9600          //;Baud rate 
+.equ   fosc, 20000000      //;Crystal frequency 
+
+
+.global main               // Main entry point
+
+
+//----------------------------//
+main:
+    // Put our stack at the top of internal SRAM
+    ldi      accum,HI(RAMEND)
+    out      SPH,accum
+    ldi      accum,LO(RAMEND)
+    out      SPL,accum
+
+    rcall USART_Init
+    rcall loop
+
+//----------------------------//
+USART_Init: 
+   ldi r17, HI(fosc/(16*baud)-1) 
+   ldi r16, LO(fosc/(16*baud)-1) 
+
+   //// Set baud rate 
+   sts UBRR0H, r17 
+   sts UBRR0L, r16 
+   
+   //// Enable receiver and transmitter 
+   ldi r16, (1<<RXEN0)|(1<<TXEN0) 
+   sts UCSR0B,r16 
+
+   //// Set frame format: 8data, 1stop bit 
+   ldi r16, (0<<USBS0)|(3<<UCSZ00) 
+   sts UCSR0C,r16 
+   ////
+   ret 
+
+//----------------------------//
+
+//ECHO SERIAL DATA
+loop: 
+   
+   ldi r16, 0x47   
+   rcall TX 
+
+   ldi r16, 0x48   
+   rcall TX 
+
+   rjmp loop 
+
+//----------------------------//
+
+RX: 
+   //; Wait for data to be received 
+   lds r17, UCSR0A 
+   sbrs r17, RXC0 
+   rjmp RX 
+
+   //; Get and return received data from buffer 
+   lds r16, UDR0 
+   ret 
+
+//----------------------------//
+
+TX: 
+   //; Wait for empty transmit buffer 
+   lds r17, UCSR0A          //;Load into R17 from SRAM UCSR0A          
+   sbrs r17, UDRE0          //;Skip next instruction If Bit Register is set 
+   rjmp TX 
+
+   //; Put data (r0) into buffer, sends the data 
+   sts UDR0, r16 
+
+   ret 
+</pre>
+
+==TIMERS==
+
+==PWM==
+
+==SPI==
+
+==ADC==
+
+==VGA==
+Timing
+<pre>
+// Video Interrupt             
+//---------------------------------------------
+// Timings for 20 Mhz:
+// 50 ns per clock tick 
+//.05 us per clock tick 
+//---------------------------------------------
+// Horizontal Front Porch:   12 cycles (0-11)
+// Horizontal Sync Pulse:    76 cycles (12-87)
+// Horizontal Back Porch:    24 cycles (88-111)
+// Horizontal Pixel Clocks:  512       (112-623)
+// Horizontal Blanking:      9 cycles  (624-632)
+//---------------------------------------------
+// Vertical Sync Pulse:      2 lines   (0-1)
+// Vertical Back Porch:      32 lines  (2-33)
+// Vertical Line Clocks:     480 lines (34-513)
+// Vertical Front Porch:     11 lines  (514-524)
+//---------------------------------------------
+// Total scan lines:         525 X 50 = 26250 ns per interrupt cycle
+// period                             = 38095.238095238 Hz
+//---------------------------------------------
+// Pixel clock frequency 	25.175 	MHz 
+// Horizontal frequency 	31.469 	kHz
+// Horizontal pixels         	640 	
+// Horizontal sync polarity 	Negative 	
+// Total time for each line 	31.778 	µs
+// Front porch (A) 	        0.636 	µs
+// Sync pulse length (B)     	3.813 	µs
+// Back porch (C) 	        1.907 	µs
+// Active video (D) 	        25.422 	µs
+//---------------------------------------------
+// Vertical lines 	        480 	
+// Vertical sync polarity 	Negative 	
+// Vertical frequency 	        59.94 	Hz
+// Total time for each frame 	16.683 	ms
+// Front porch (A)           	0.318 	ms
+// Sync pulse length (B) 	0.064 	ms
+// Back porch (C) 	        1.048 	ms
+// Active video (D) 	        15.253 	ms
+</pre>
+
+ISR pseudo code
+<pre>
+push SREG 
+H front porch
+H sync pulse low
+V sync pulse low if end of pixel row
+-else- V sync pulse high 
+pop SREG
+</pre>
+
+
+
+Getting image data in AVR assembly 
+<pre>
+hexdump -ve '1/0 ".byte " 200/1 "0x%.2x," 1/0 "\n"' foobar.raw > foobar.S
+</pre>

@@ -1,0 +1,317 @@
+
+
+Beyond the mojo ... further down the Xilinx spiral.
+
+Documenting my adventures in making a "bare metal" FPGA PCB.
+
+
+
+
+
+==<b> Numato Mimas clone specs</b>==
+
+It works!!! It works!!! I got it working!!!
+<pre>
+
+</pre>
+
+unpopulated (no flash yet though)
+Front unpopulated
+<pre>
+vr2,vr1
+r21,r22,c31
+
+</pre>
+
+Back unpopulated
+<pre>
+r10,r25,r26
+gs4,gs3
+</pre>
+
+Jumper settings
+<pre>
+GS2 - pins 1->2 
+GS3 - closed
+GS4 - open 
+GS5 - open 
+
+</pre>
+
+==<b>flash rom pinouts</b>==
+
+First successful SPI flash programming with impact was
+<pre>
+W25Q64FV 
+</pre>
+
+MIMAS - M25P16 (SPI compatible)  
+<pre>
+C - serial clock 
+DQ0 - serial data in 
+DQ1 - serial data out
+S# - chip select 
+W# - write protect 
+HOLD# - hold??
+Vcc - power
+Vss - ground
+</pre>
+
+
+<pre>
+SCK   - serial clock
+SI    - serial data in
+SO    - serial data out
+CE#   - chip enable
+WP#   - write protect 
+HOLD# - hold
+Vdd   - power
+Vss   - Ground
+</pre>
+
+<pre>
+CS      -1   8- VCAUX
+SDI     -2   7- VCAUX
+VCAUX   -3   6- SCK
+GND     -4   5- SDO
+</pre>
+
+
+MOJO - SST25VF040B  - NOT COMPATIBLE with ISE Impact !!
+<pre>
+SCS  -1  8- Vdd
+SDI  -2  7- HOLD$
+WP#  -3  6- SCK
+VSS  -4  5- SI
+</pre>
+
+==<b>pin descriptions</b>==
+
+===Power Pins===
+<pre>
+VCCIO  - adjustable 3.3V or 2.5v (3.3 on mojo)
+VCINT  - 1.2 on mojo 
+VCAUX  - 3.3 on mojo 
+
+--- 
+If VCCO_2 is 1.8V, V CCAUX must be 2.5V. If VCCO_2 is 2.5V or 3.3V, V CCAUX can be
+either 2.5V or 3.3V
+
+</pre>
+
+<b>VCCINT</b>
+<pre>
+VCCINT inputs feed a common metalization inside the chip, so they are connected internally. However, all VCCINT balls should be soldered to ensure good decoupling capacitors and to minimize IR drop and noise on the power rails.  
+
+The distribution of VCCINT (or ICCINT) is not perfect with incomplete connections. Although your design might work, it is exposed to uncontrolled internal VCC drop and VCC noise. Xilinx does not recommend this approach.
+</pre>
+
+<b>VCCAUX</b>
+<pre>
+All VCCAUX bumps on the die go to a common metal interconnect and to a common connection on the laminate package.
+
+As with VCCINT, DO NOT leave any VCCAUX pins unconnected, because it increases the inductance to the bypass caps and slightly increases noise and jitter. VCCAUX pins must be well bypassed.
+
+For more information on VCCAUX, see (Xilinx Answer 11182).
+</pre>
+
+<b>VCCAUX_IO</b>
+<pre>
+VCCAUX_IO are found in 7 Series High Performance (HP) I/O banks. The VCCAUX_IO pins are localized to each I/O bank, and are separate from the global VCCAUX pins/interconnect.
+</pre>
+
+<b>VCCO</b>
+<pre>
+Most VCCO pins are only tied together for pins in the same bank. However, some of the smaller Spartan-II packages (VQ100, TQ144, CS144 and PQ208) share a common VCCO power rail between different banks.
+</pre>
+
+
+<b>GND</b>
+<pre>
+On the die, all ground inputs (relative to VCCAUX, VCCOs , VCCINT) feed a common metalization.
+</pre>
+
+===<b> SPECIFIC PINS  </b> ===
+<pre>
+P_GCLK -P56  - MOJO_CLK
+N_GCLK -P126 - MIMAS_CLK 
+</pre>
+
+===<b> MULTIFUNCTION PINS</b>===
+<pre>
+MO   -P69 - MODE PINS P60,P69
+CCLK -P70 - SCK
+CSI - P64 - SDO
+DIN - P65 - SDI
+CSO - P38 - SCS
+
+     -P57 - CLK
+     -P58 - WR
+     -P59 - RD
+
+DOUT_BUSY           - P74 - 
+INIT                - P39 - INIT_B
+AWAKE
+P_GCLK - ( 8 pins ) 
+N_GCLK - ( 8 pins ) - P126- GCLK
+FCS/FWE/FOE/HDC/LDC
+HSWAPIN             - P144
+</pre>
+
+==dedicated pins==
+<pre>
+PROGRAM_B_2 - P37  - PROGB 
+TCK         - P109 -
+TDI         - P110 - 
+TDO         - P106 -
+TMS         - P107 -
+SUSPEND     - P73  - (pulled low 10K on mojo )
+DONE        - P71  - DONE_2 
+</pre>
+
+
+PINS/terminology
+<pre>
+ODDR2- standard DDR output flop
+</pre>
+
+
+EXTERNAL CLOCK PINS ARE CONFIGURABLE (WITHIN LIMITS)
+<pre>
+#Created by Constraints Editor (xc6slx9-tqg144-3) - 2012/11/05
+NET "clk" TNM_NET = clk;
+TIMESPEC TS_clk = PERIOD "clk" 50 MHz HIGH 50%;
+# PlanAhead Generated physical constraints 
+NET "clk" LOC = P56 | IOSTANDARD = LVTTL;
+</pre>
+
+==Pin descriptions==
+
+<b>INIT_B</b>
+<pre>
+Before the Mode pins are sampled, INIT_B is an input that can be held Low to delay configuration.
+After the Mode pins are sampled, INIT_B is an open-drain active-Low output indicating whether
+    a CRC error occurred during configuration:
+    0 = CRC error
+    1 = No CRC error
+When the SEU detection function is enabled, INIT_B is reserved and cannot be used as user I/O.
+Because it is open drain - an external pull-up resistor is recommended.
+</pre>
+
+
+<b>GCLK</b> (group of pins P and N )
+<pre>
+the advantage of GCLK is the dedicated route to the input of a BUFG or 
+DCM that offers lowerclock insertion delay
+--
+
+tools will automatically insert clock buffers if they detect that an input signal is used as a clock for synchronous logic
+
+</pre>
+
+
+<b>PROG_B</b>
+<pre>
+
+Global asynchronous chip reset. Can be held Low to delay
+configuration.
+
+If JTAG is the only configuration mode, then PROGRAM_B, INIT_B, and DONE can be
+tied High to a 330Ω resistor.
+</pre>
+
+
+<b>SUSPEND</b>
+<pre>
+The SUSPEND pin should be Low during power up and configuration. If the Suspend
+feature is not used, the SUSPEND pin must be connected to ground.
+</pre>
+
+
+<b>M0, M1, etc (Mode Pins)</b>
+<pre>
+Spartan-6 devices only expose two mode
+pins M[1:0], which define the configuration modes, instead of three mode pins M[2:0] used
+by the Extended Spartan-3A family
+</pre>
+
+
+
+<b>DONE</b>  
+<pre>
+Indicates configuration is complete. Can be held Low externally to
+synchronize startup with other FPGAs.
+
+The DONE pin is by default an open-drain output with an internal pull-up. An
+additional external pull-up is recommended. The DONE pin has a programmable
+active driver that can be enabled via the BitGen option -g DriveDon
+</pre>
+
+==<b>toolchain</b>==
+
+===ISE===
+
+ucf file 
+
+mcs file 
+
+bit file 
+
+bin file 
+
+
+
+
+===Impact===
+easiest was to use:
+<pre>
+double click "boundary scan" and select your bitfile. It can connect and program from there 
+</pre>
+
+
+SPI flash with Impact
+<pre>
+Grrr not all Flash chips are compatible with impact including the "" on the mojo..... 
+</pre>
+
+<b>SPI VS BPI</b>
+<pre>
+SPI protocol is serial type interface. It requires less number of programming pins compare to BPI for configuration. The configuration time is more compare to BPI
+-- FPGA configures as per industry-standard SPI serial interface protocal
+–Mostly used in multi-boot applications where multiple bitstreams can be loaded by the FPGA
+
+
+BPI protocol is parallel type interface. It requires more number of programming pins compare to SPI for configuration. The configuration time is less compare to SPI
+
+–Uses standard parallel NOR Flash interface
+–No clock is needed because the FPGA  contains the control logic
+–Flash is easily used as addressable memory with address and data buses. Usually used in embedded applications
+
+</pre>
+
+===Vivado=== 
+
+
+
+==<b>dev boards</b>==
+
+===Digilent arty===
+
+<pre>
+"MAC" and "PHY" chips (for "media-access controller" and "physical-Layer Interface")
+</pre>
+
+
+<b>install</b>
+
+<pre>
+https://reference.digilentinc.com/reference/software/vivado/board-files?redirect=1
+</pre>
+
+<pre>
+copy board_files to /opt/Xilinx/Vivado/2017.3/data/boards/board_files
+</pre>
+
+===Numato saturn===
+
+==toolchain==
