@@ -1,1974 +1,1974 @@
 
 
+<html>
+
+    <body>
 
 
+        <link rel="stylesheet" href="styles/default.css">
+        <script charset="UTF-8" src="highlight.pack.js"></script>
+        <script>hljs.initHighlightingOnLoad();</script>
 
-==AVR Assembly==
 
-I added some notes on AVR assembly on Linux with GCC
+        <h2>Setup env and programmers</h2>
 
-[[Avr-assembler]]
+        tools to use and learn from :
 
-==Setup env and programmers==
+        <pre>
+            http://www.avrfreaks.net/
+            http://avrbasiccode.wikispaces.com/
+            http://www.avrbeginners.net/
+            http://www.engbedded.com/fusecalc
+            http://www.wormfood.net/avrbaudcalc.php
+            http://www.josephn.net/avr/avr_ubrr_calculator
+            http://www.mathsisfun.com/binary-decimal-hexadecimal-converter.html
+            http://www.marcelpost.com/wiki/index.php/ATtiny85_ADC
+        </pre>
 
-tools to use and learn from :
 
-<pre>
-http://www.avrfreaks.net/
-http://avrbasiccode.wikispaces.com/
-http://www.avrbeginners.net/
-http://www.engbedded.com/fusecalc
-http://www.wormfood.net/avrbaudcalc.php
-http://www.josephn.net/avr/avr_ubrr_calculator
-http://www.mathsisfun.com/binary-decimal-hexadecimal-converter.html
-http://www.marcelpost.com/wiki/index.php/ATtiny85_ADC
-</pre>
+        Path to avr-gcc on linux
+        <pre>
+            /usr/lib/avr
+        </pre>
 
 
-Path to avr-gcc on linux
-<pre>
-/usr/lib/avr
-</pre>
 
 
 
+        set permissions for usbtiny
+        <pre>
+            #FROM http://mightyohm.com/blog/2010/03/run-avrdude-without-root-privs-in-ubuntu/
+            #Create a file called 10-usbtinyisp.rules in directory /etc/udev/rules.d
+
+            sudo nano /etc/udev/rules.d/10-usbtinyisp.rules
+
+            SUBSYSTEM=="usb", SYSFS{idVendor}=="1781", SYSFS{idProduct}=="0c9f", GROUP="adm", MODE="0666"
+
+            #Then execute:
+
+            sudo restart udev
+        </pre>
+
+        <h2>Hello World</h2>
+
+
+        Blink some LED's on port B
+        Save as blink.c and compile with commands below (may not work with all atmegas- read the datasheet)
 
+        <pre>
+            <code class="c">    
+                #include <avr/io.h>
+                #include <util/delay.h>
 
-set permissions for usbtiny
-<pre>
-#FROM http://mightyohm.com/blog/2010/03/run-avrdude-without-root-privs-in-ubuntu/
-#Create a file called 10-usbtinyisp.rules in directory /etc/udev/rules.d
+                int main (void)
+                {
+                  /* set PORTB for output*/
+                  DDRB = 0xFF;
+                  int del = 10;
+                  
+                  while (1)
+                    {
+                      PORTB = 0x01;
+                      _delay_ms(del);
+                      PORTB = 0x00;
+                      _delay_ms(del);
+                      
+                      //////
+                      PORTB = 0x02;
+                      _delay_ms(del);
+                      PORTB = 0x00;
+                      _delay_ms(del);
+                      //////
+                      PORTB = 0x04;
+                      _delay_ms(del);
+                      PORTB = 0x00;
+                      _delay_ms(del);
+                      //////
+                      PORTB = 0x02;
+                      _delay_ms(del);
+                      PORTB = 0x00;
+                      _delay_ms(del);     
+                      
+                      PORTB = 0x01;
+                      _delay_ms(del);
+                      PORTB = 0x00;
+                      _delay_ms(del);
+                          
+                    }
+
+                  return 1;
+                }
+            </code>
+        </pre>
+
+        Compile and upload the code WITHOUT makefile
+
+        <pre>
+         avr-gcc -DF_CPU=16000000UL -mmcu=atmega164p -o blink.out blink.c 
+
+         avr-objcopy -O ihex -R .eeprom blink.out blink.hex
 
-sudo nano /etc/udev/rules.d/10-usbtinyisp.rules
+         avrdude -V -c usbtiny -p atmega164p -b 19200 -P /dev/cuaU0 -U flash:w:blink.hex
+        </pre>
+
+
+        You can output an assembly file to see what the compiler is doing
+        <pre>
+        avr-g++ -S -DF_CPU=16000000UL -mmcu=atmega164p -o blink.S blink.c
+        </pre>
 
-SUBSYSTEM=="usb", SYSFS{idVendor}=="1781", SYSFS{idProduct}=="0c9f", GROUP="adm", MODE="0666"
+        You can use gcc to compile your asm code. Use -c for compilation like this:
+        <pre>
+        avr-g++ -DF_CPU=16000000UL -mmcu=atmega2560 -c blink.S -o blink.o
+        </pre>
+
+        This will give object code file blink.o. To invoke linker:
+        <pre>
+        gcc blink.o -o blink
+        </pre>
+
+        avrdude has an interactive shell - use "-tuF" to get to it
+        <pre>
+        sudo avrdude -V -c usbtiny -p atmega324pa  -tuF
+        </pre>
+
+        <h2>Example makefile</h2>
+        <pre>
+        <code class="make">    
+        PROJECT=blink
+        SOURCES=./src/*.c
+        CC=avr-gcc
+        OBJCOPY=avr-objcopy
+        MMCU=attiny85
+        PROG_MMCU=attiny85
+        PROGRAMMER=usbtiny
+        PORT=/dev/cuaU0
 
-#Then execute:
+        #defaults for attiny85
+        LOW_FUSE=0x62
+        HIGH_FUSE=0xdf
+        EXT_FUSE=0xff
 
-sudo restart udev
-</pre>
 
-==Hello World==
+        ###############################
 
 
-Blink some LED's on port B
-Save as blink.c and compile with commands below (may not work with all atmegas- read the datasheet)
+        CFLAGS=-mmcu=$(MMCU) -Wall -Os -std=gnu99 -funsigned-char \
+            -funsigned-bitfields -fpack-struct -fshort-enums -MD -MP -MT -I./
 
-<pre>
-#include <avr/io.h>
-#include <util/delay.h>
+        $(PROJECT).hex: $(PROJECT).out
+            @echo "Creating hex file..."
+            $(OBJCOPY) -j .text -O ihex $(PROJECT).out $(PROJECT).hex
+            rm -f ./*.d
+            rm -f ./*.out
+            @echo
 
-int main (void)
-{
-  /* set PORTB for output*/
-  DDRB = 0xFF;
-  int del = 10;
-  
-  while (1)
-    {
-      PORTB = 0x01;
-      _delay_ms(del);
-      PORTB = 0x00;
-      _delay_ms(del);
-	  
-	  //////
-      PORTB = 0x02;
-      _delay_ms(del);
-      PORTB = 0x00;
-      _delay_ms(del);
-	  //////
-      PORTB = 0x04;
-      _delay_ms(del);
-      PORTB = 0x00;
-      _delay_ms(del);
-	  //////
-      PORTB = 0x02;
-      _delay_ms(del);
-      PORTB = 0x00;
-      _delay_ms(del);	  
-	  
-      PORTB = 0x01;
-      _delay_ms(del);
-      PORTB = 0x00;
-      _delay_ms(del);
-		  
-    }
-
-  return 1;
-}
-</pre>
+        $(PROJECT).out: $(SOURCES)
+            @echo
+            @echo "Compiling..."
+            $(CC) $(CFLAGS) -o $(PROJECT).out $(SOURCES)
+            avr-size $(PROJECT).out
+            @echo
 
-Compile and upload the code WITHOUT makefile
+        program: $(PROJECT).hex
+            @echo
+            @echo "Downloading..."
+            avrdude -P $(PORT) -v -p $(PROG_MMCU) -c $(PROGRAMMER) -e \
+            -U flash:w:$(PROJECT).hex
+            @echo
 
-<pre>
- avr-gcc -DF_CPU=16000000UL -mmcu=atmega164p -o blink.out blink.c 
-
- avr-objcopy -O ihex -R .eeprom blink.out blink.hex
+        program_fuses:
+            @echo
+            @echo "Writing fuses..."
+            avrdude -P $(PORT) -v -p $(PROG_MMCU) -c $(PROGRAMMER) -e \
+            -U lfuse:w:$(LOW_FUSE):m -U hfuse:w:$(HIGH_FUSE):m -U efuse:w:$(EXT_FUSE):m
+            @echo
 
- avrdude -V -c usbtiny -p atmega164p -b 19200 -P /dev/cuaU0 -U flash:w:blink.hex
-</pre>
-
+        clean:
+            @echo
+            @echo "Cleaning..."
+            rm -f ./*.out
+            rm -f ./*.hex
+            rm -f ./*.d
+            rm -f ./*.map
+            rm -f ./*.o
+            @echo
 
-You can output an assembly file to see what the compiler is doing
-<pre>
-avr-g++ -S -DF_CPU=16000000UL -mmcu=atmega164p -o blink.S blink.c
-</pre>
-
-You can use gcc to compile your asm code. Use -c for compilation like this:
-<pre>
-avr-g++ -DF_CPU=16000000UL -mmcu=atmega2560 -c blink.S -o blink.o
-</pre>
-
-This will give object code file blink.o. To invoke linker:
-<pre>
-gcc blink.o -o blink
-</pre>
-
-avrdude has an interactive shell - use "-tuF" to get to it
-<pre>
-sudo avrdude -V -c usbtiny -p atmega324pa  -tuF
-</pre>
-
-==Example makefile==
-<pre>
-PROJECT=blink
-SOURCES=./src/*.c
-CC=avr-gcc
-OBJCOPY=avr-objcopy
-MMCU=attiny85
-PROG_MMCU=attiny85
-PROGRAMMER=usbtiny
-PORT=/dev/cuaU0
+        </code>
+        </pre>
 
-#defaults for attiny85
-LOW_FUSE=0x62
-HIGH_FUSE=0xdf
-EXT_FUSE=0xff
 
 
-###############################
+        OTHER PROGRAMMERS
 
+        Bus Pirate
+        <pre>
+          avrdude -p t84 -P /dev/ttyUSB2 -c buspirate 
+        </pre>
 
-CFLAGS=-mmcu=$(MMCU) -Wall -Os -std=gnu99 -funsigned-char \
-	-funsigned-bitfields -fpack-struct -fshort-enums -MD -MP -MT -I./
 
-$(PROJECT).hex: $(PROJECT).out
-	@echo "Creating hex file..."
-	$(OBJCOPY) -j .text -O ihex $(PROJECT).out $(PROJECT).hex
-	rm -f ./*.d
-	rm -f ./*.out
-	@echo
+        ATMEL STK500
+        <pre>
+          avrdude -v -p atmega328p -P usb -c avrispmkII -e -U flash:w:$(PROJECT).hex
+        </pre>
 
-$(PROJECT).out: $(SOURCES)
-	@echo
-	@echo "Compiling..."
-	$(CC) $(CFLAGS) -o $(PROJECT).out $(SOURCES)
-	avr-size $(PROJECT).out
-	@echo
+        <h2>Notes on fuse bits</h2>
 
-program: $(PROJECT).hex
-	@echo
-	@echo "Downloading..."
-	avrdude -P $(PORT) -v -p $(PROG_MMCU) -c $(PROGRAMMER) -e \
-	-U flash:w:$(PROJECT).hex
-	@echo
+        <pre>
+        you can get yourself into trouble if you are not careful about which fuses you set.
+        There are fuses that set the chip to read only and you wont be able to program it again. 
+        A common mistake I make is setting the clock to external and then losing the ability to talk to the chip.
+        I have had weird cases where a chip will not work at 16Mhz, but it will at 8Mhz, so it is useful to keep various speeds of xtal handy
+        (This is caused by setting a speed/prescalar to a setting that is toofast/slow for your clock)
+        I have even programmed an AVR chip by clocking it with a function generator running at 1Mhz, you may even be able to use any 5V clean square wave
+        (Hook the TTL square wave to XTAL 1 pin)
 
-program_fuses:
-	@echo
-	@echo "Writing fuses..."
-	avrdude -P $(PORT) -v -p $(PROG_MMCU) -c $(PROGRAMMER) -e \
-	-U lfuse:w:$(LOW_FUSE):m -U hfuse:w:$(HIGH_FUSE):m -U efuse:w:$(EXT_FUSE):m
-	@echo
+        On some devices some ports (PORTC) may not be usable until you disable JTAG 
+        You want to use the LONGEST set up time for an oscillator to let things electrically settle before clocking.
+        The good news is that although it is easy to make an AVR unresponsive, I have never seen one couldn’t be recovered with external clock
+        </pre>
 
-clean:
-	@echo
-	@echo "Cleaning..."
-	rm -f ./*.out
-	rm -f ./*.hex
-	rm -f ./*.d
-	rm -f ./*.map
-	rm -f ./*.o
-	@echo
 
+        notes on fuse bits
+        <pre>
+        The Startup Time is how long the clock source needs to calm down from when power is first applied. 
+        Always go with the longest setting (14CK + 65ms )
 
-</pre>
+        THIS IS MEGA HELPFUL!
+         http://www.engbedded.com/fusecalc/
 
 
+        IN RELATION TO PRESCALER:
 
-OTHER PROGRAMMERS
+        The CKDIV8 Fuse determines the initial value of the CLKPS bits. If CKDIV8 is unprogrammed,
+        the CLKPS bits will be reset to “0000”. If CKDIV8 is programmed, CLKPS bits are reset to
+        “0011”, giving a division factor of 8 at start up. This feature should be used if the selected clock
+        source has a higher frequency than the maximum frequency of the device at the present operat-
+        ing conditions.
 
-Bus Pirate
-<pre>
-  avrdude -p t84 -P /dev/ttyUSB2 -c buspirate 
-</pre>
 
+        </pre>
 
-ATMEL STK500
-<pre>
-  avrdude -v -p atmega328p -P usb -c avrispmkII -e -U flash:w:$(PROJECT).hex
-</pre>
 
-==Notes on fuse bits==
+        READ FUSE BITS
 
-<pre>
-you can get yourself into trouble if you are not careful about which fuses you set.
-There are fuses that set the chip to read only and you wont be able to program it again. 
-A common mistake I make is setting the clock to external and then losing the ability to talk to the chip.
-I have had weird cases where a chip will not work at 16Mhz, but it will at 8Mhz, so it is useful to keep various speeds of xtal handy
-(This is caused by setting a speed/prescalar to a setting that is toofast/slow for your clock)
-I have even programmed an AVR chip by clocking it with a function generator running at 1Mhz, you may even be able to use any 5V clean square wave
-(Hook the TTL square wave to XTAL 1 pin)
+        <pre>
+         sudo avrdude -V -c usbtiny -p atmega164p  -U hfuse:r:high.hex:i -U lfuse:r:low.hex:i 
+        </pre>
 
-On some devices some ports (PORTC) may not be usable until you disable JTAG 
-You want to use the LONGEST set up time for an oscillator to let things electrically settle before clocking.
-The good news is that although it is easy to make an AVR unresponsive, I have never seen one couldn’t be recovered with external clock
-</pre>
 
+        READ OTHER MEMORY
+        <pre>
+        #FLASH
+        avrdude -p atmega328p -c usbtiny -U flash:r:"./flashram flash.bin":r 
 
-notes on fuse bits
-<pre>
-The Startup Time is how long the clock source needs to calm down from when power is first applied. 
-Always go with the longest setting (14CK + 65ms )
+        #EEPROM
+        avrdude -p atmega328p -c usbtiny -U eeprom:r:eedump.hex:i
 
-THIS IS MEGA HELPFUL!
- http://www.engbedded.com/fusecalc/
+        </pre>
 
+        OUTPUT FORMATS ARE
+        <pre>
+        i Intel Hex
+        s Motorola S-record
+        r raw binary; little-endian byte order, 
+        </pre>
 
-IN RELATION TO PRESCALER:
 
-The CKDIV8 Fuse determines the initial value of the CLKPS bits. If CKDIV8 is unprogrammed,
-the CLKPS bits will be reset to “0000”. If CKDIV8 is programmed, CLKPS bits are reset to
-“0011”, giving a division factor of 8 at start up. This feature should be used if the selected clock
-source has a higher frequency than the maximum frequency of the device at the present operat-
-ing conditions.
 
+        OR DO THAT AS A RAW FILE AND CONVERT TO BINARY 
 
-</pre>
+        <pre>
 
+        //READ THIS:
+        //http://electrons.psychogenic.com/modules/arms/art/14/AVRFusesHOWTOGuide.php
 
-READ FUSE BITS
+        sudo avrdude -V -c usbtiny -p atmega164p  -U hfuse:r:high.txt:r -U lfuse:r:low.txt:r 
+        </pre>
 
-<pre>
- sudo avrdude -V -c usbtiny -p atmega164p  -U hfuse:r:high.hex:i -U lfuse:r:low.hex:i 
-</pre>
+        <pre>
+        od -d high.txt  | head -1 | sed -e 's/0000000 *//' | \
+          xargs -i perl -e '$str= unpack("B32", pack("N",{})); $str =~ s/.*([01]{4})([01]{4})$/$1 $2/; \
+          print "$str\n";'
+        </pre>
 
 
-READ OTHER MEMORY
-<pre>
-#FLASH
-avrdude -p atmega328p -c usbtiny -U flash:r:"./flashram flash.bin":r 
+        SET FUSE BITS 
 
-#EEPROM
-avrdude -p atmega328p -c usbtiny -U eeprom:r:eedump.hex:i
+        DEFAULT
+        <pre>
+        (sudo?)
 
-</pre>
+         avrdude -V -c usbtiny -p atmega164p  -U lfuse:w:0x42:m -U hfuse:w:0x99:m -U efuse:w:0xff:m
 
-OUTPUT FORMATS ARE
-<pre>
-i Intel Hex
-s Motorola S-record
-r raw binary; little-endian byte order, 
-</pre>
+        </pre>
 
 
+        Run off an 8Mhz external resonator of crystal
 
-OR DO THAT AS A RAW FILE AND CONVERT TO BINARY 
+        <pre>
+         avrdude -V -c usbtiny -p atmega164p  -U lfuse:w:0xee:m -U hfuse:w:0xd9:m -U efuse:w:0xff:m 
+        </pre>
 
-<pre>
+        <h2>CLOCK / CLOCK SPEED</h2>
+        FOR GODS SAKE READ THE DATASHEET!
 
-//READ THIS:
-//http://electrons.psychogenic.com/modules/arms/art/14/AVRFusesHOWTOGuide.php
+        EACH BIT IN EACH REGISTER DOES SOMETHING
 
-sudo avrdude -V -c usbtiny -p atmega164p  -U hfuse:r:high.txt:r -U lfuse:r:low.txt:r 
-</pre>
 
-<pre>
-od -d high.txt  | head -1 | sed -e 's/0000000 *//' | \
-  xargs -i perl -e '$str= unpack("B32", pack("N",{})); $str =~ s/.*([01]{4})([01]{4})$/$1 $2/; \
-  print "$str\n";'
-</pre>
+        SET THE PRESCALER FOR ATTINY85
+        <pre>
+          CLKPR = (1 << CLKPCE); //enable register CLKPR
+          CLKPR = (1 << CLKPS1); //set bit 1 of register CLKPR (divide by 4)
+        </pre>
 
 
-SET FUSE BITS 
+        <pre>
+         The microcontroller’s power consumption is directly related to operating speed
+         When using the prescaler you can achieve greater timer values, while precision goes down
+        </pre>
 
-DEFAULT
-<pre>
-(sudo?)
 
- avrdude -V -c usbtiny -p atmega164p  -U lfuse:w:0x42:m -U hfuse:w:0x99:m -U efuse:w:0xff:m
 
-</pre>
+        <pre>
+        8-bit timer: The timer clock (from System Clock, prescaled System Clock or External Pin T0) counts up the Timer/Counter Register (TCNT0). 
+        When it rolls over (0xFF -> 0x00) the Overflow Flag is set and the Timer/Counter 1 Overflow Interrupt Flag is set. 
+        If the corresponding bit in TIMSK (Timer Interrupt Mask Register) is set (in this case the bit is named "TOIE0") and global Interrupts are enabled,
+         the micro will jump to the corresponding interrupt vector (in the 2313 this is vector number 7).
+        </pre>
 
 
-Run off an 8Mhz external resonator of crystal
+        <pre>
+        OCSILATOR->PRESCALER (8, 64, 256 or 1024)->
 
-<pre>
- avrdude -V -c usbtiny -p atmega164p  -U lfuse:w:0xee:m -U hfuse:w:0xd9:m -U efuse:w:0xff:m 
-</pre>
+        Timer/Counter0        -TCNT0
+        Timer Interrupt Mask  -TIMSK
+        Timer Interrupt Flags -TIFR
+        COntrol Register      -TCCR0
 
-==CLOCK / CLOCK SPEED==
-FOR GODS SAKE READ THE DATASHEET!
+        </pre>
 
-EACH BIT IN EACH REGISTER DOES SOMETHING
+        <h2>AVR TERMS/REGISTERS</h2>
 
+        <pre>
 
-SET THE PRESCALER FOR ATTINY85
-<pre>
-  CLKPR = (1 << CLKPCE); //enable register CLKPR
-  CLKPR = (1 << CLKPS1); //set bit 1 of register CLKPR (divide by 4)
-</pre>
+        #AVR MACROS
+        SEI    = enable  global interrupts
+        CLI    = disable global interrupts
 
+        #TERMS , ETC
+        FOSC   = AVR Oscillator speed
 
-<pre>
- The microcontroller’s power consumption is directly related to operating speed
- When using the prescaler you can achieve greater timer values, while precision goes down
-</pre>
+        #IMPORTANT REGISTERS / BITS
+        SREG   = status register
+        ICP    = input capture unit
+        ICNC1  = Input Capture Noise Canceler 
+        TCNTN  = Timer/Counter
+        TCCR   = starts clock and sets TIMER prescale
+        TCCR0A = Timer/Counter Control Register (0 - 8 bit , 1- 16 bit?)
+        CTC    = clear timer on compare
+        WGM    = waveform generation mode
+        OCR    = output compare register
+        OC0A   = Output Compare pin 
+        TIMSK  = timer/counter interrupt mask register
+        TIFR   = timer interrupt flag register
+        CLKPR  = Clock Prescale Register (SYSTEM clock not TIMER prescale!)
+        CLKPCE = Clock Prescaler Change Enable  
 
+        PCMSK  = Pin Change Mask Register
+        GIMSK  = General Interrupt Mask Register
+        MCUCR  = MCU Control Register 
 
+        TOV0   = Timer/Counter Overflow Flag 
+        ICR1   = Input Capture Register
+        COM1A1 = Compare Output Mode for Channel A
+        OSCCAL = Oscillator Calibration Register 
 
-<pre>
-8-bit timer: The timer clock (from System Clock, prescaled System Clock or External Pin T0) counts up the Timer/Counter Register (TCNT0). 
-When it rolls over (0xFF -> 0x00) the Overflow Flag is set and the Timer/Counter 1 Overflow Interrupt Flag is set. 
-If the corresponding bit in TIMSK (Timer Interrupt Mask Register) is set (in this case the bit is named "TOIE0") and global Interrupts are enabled,
- the micro will jump to the corresponding interrupt vector (in the 2313 this is vector number 7).
-</pre>
+        UDR    = USART Data Register
+        UCSRA  = USART Control and status Register A
+        UBRRH  = USART Baud rate register,
 
+        USI    = Universal Serial Interface
+        USISR  = USI Status Register
 
-<pre>
-OCSILATOR->PRESCALER (8, 64, 256 or 1024)->
+        </pre>
 
-Timer/Counter0        -TCNT0
-Timer Interrupt Mask  -TIMSK
-Timer Interrupt Flags -TIFR
-COntrol Register      -TCCR0
 
-</pre>
 
-==AVR TERMS/REGISTERS==
 
-<pre>
+        Storing data in flash on an AVR 
+        <pre>
 
-#AVR MACROS
-SEI    = enable  global interrupts
-CLI    = disable global interrupts
+        Program Space: - Goes to Flash (stack is SRAM) 
+         unsigned char mydata[11][10] PROGMEM =
+         {
+          {0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09},
+          {0x0A,0x0B,0x0C,0x0D,0x0E,0x0F,0x10,0x11,0x12,0x13}
+         }
 
-#TERMS , ETC
-FOSC   = AVR Oscillator speed
+        Get your data by: 
+          byte = pgm_read_byte(&(mydata[i][j]));
 
-#IMPORTANT REGISTERS / BITS
-SREG   = status register
-ICP    = input capture unit
-ICNC1  = Input Capture Noise Canceler 
-TCNTN  = Timer/Counter
-TCCR   = starts clock and sets TIMER prescale
-TCCR0A = Timer/Counter Control Register (0 - 8 bit , 1- 16 bit?)
-CTC    = clear timer on compare
-WGM    = waveform generation mode
-OCR    = output compare register
-OC0A   = Output Compare pin 
-TIMSK  = timer/counter interrupt mask register
-TIFR   = timer interrupt flag register
-CLKPR  = Clock Prescale Register (SYSTEM clock not TIMER prescale!)
-CLKPCE = Clock Prescaler Change Enable  
 
-PCMSK  = Pin Change Mask Register
-GIMSK  = General Interrupt Mask Register
-MCUCR  = MCU Control Register 
+        #The "rule of thumb" for accessing data stored in the Program Space is to access the data as you normally would 
+        #(as if the variable is stored in Data Space), like so:
+        byte = mydata[i][j];
 
-TOV0   = Timer/Counter Overflow Flag 
-ICR1   = Input Capture Register
-COM1A1 = Compare Output Mode for Channel A
-OSCCAL = Oscillator Calibration Register 
+        #then take the address of the data:
+        byte = &(mydata[i][j]);
 
-UDR    = USART Data Register
-UCSRA  = USART Control and status Register A
-UBRRH  = USART Baud rate register,
+        #then use the appropriate pgm_read_* macro, and the address of your data becomes the parameter to that macro:
+        byte = pgm_read_byte(&(mydata[i][j]));
 
-USI    = Universal Serial Interface
-USISR  = USI Status Register
 
-</pre>
+        PGM_P  - macro that defined as a pointer to a character in the Program Space.
 
 
 
 
-Storing data in flash on an AVR 
-<pre>
+        </pre>
 
-Program Space: - Goes to Flash (stack is SRAM) 
- unsigned char mydata[11][10] PROGMEM =
- {
-  {0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09},
-  {0x0A,0x0B,0x0C,0x0D,0x0E,0x0F,0x10,0x11,0x12,0x13}
- }
+        <h2>Program Space</h2>
 
-Get your data by: 
-  byte = pgm_read_byte(&(mydata[i][j]));
+        store data in program space and draw to a screen
+        this makes a checkerboard pattern
+        <pre>
 
+           #include <avr/pgmspace.h>
 
-#The "rule of thumb" for accessing data stored in the Program Space is to access the data as you normally would 
-#(as if the variable is stored in Data Space), like so:
-byte = mydata[i][j];
+           ------
 
-#then take the address of the data:
-byte = &(mydata[i][j]);
+           static const uint8_t foo[5] PROGMEM = { 0xaa, 0x55, 0xaa, 0x55, 0xaa };  
+           const uint8_t *addr = foo;
 
-#then use the appropriate pgm_read_* macro, and the address of your data becomes the parameter to that macro:
-byte = pgm_read_byte(&(mydata[i][j]));
+           for(i=0;i<5;i++){
+               uint8_t line = pgm_read_byte(addr++);
 
+               for (j = 0; j<8; j++){
+                   if ( !!(line  & (1 << (8 - j))) ){  // MSB
+                       ST7735_DrawPixel(x+j, y+i, 0xffff ); 
+                   }else{
+                       ST7735_DrawPixel(x+j, y+i, 0x0000 ); 
+                   }
+               }
 
-PGM_P  - macro that defined as a pointer to a character in the Program Space.
-
-
-
-
-</pre>
-
-==Program Space==
-
-store data in program space and draw to a screen
-this makes a checkerboard pattern
-<pre>
-
-   #include <avr/pgmspace.h>
-
-   ------
-
-   static const uint8_t foo[5] PROGMEM = { 0xaa, 0x55, 0xaa, 0x55, 0xaa };  
-   const uint8_t *addr = foo;
-
-   for(i=0;i<5;i++){
-       uint8_t line = pgm_read_byte(addr++);
-
-       for (j = 0; j<8; j++){
-           if ( !!(line  & (1 << (8 - j))) ){  // MSB
-               ST7735_DrawPixel(x+j, y+i, 0xffff ); 
-           }else{
-               ST7735_DrawPixel(x+j, y+i, 0x0000 ); 
            }
-       }
+        </pre>
 
-   }
-</pre>
+        <h2>C language Tips</h2>
 
-==C language Tips==
+        <pre>
+        #include <file> used for system header files. You can prepend directories to this list with the -I option.
+        #include "file" used for header files of your own program. You can prepend directories to the list of quote directories with the -iquote option.
+        </pre>
 
-<pre>
-#include <file> used for system header files. You can prepend directories to this list with the -I option.
-#include "file" used for header files of your own program. You can prepend directories to the list of quote directories with the -iquote option.
-</pre>
+        <pre>
 
-<pre>
+        The compiler is the real programmer hero of your C program. You tell it what you want your program to do
+        it then decides how to best create the instructions and where they should go to get you what you want.
+        Machines have many types of memory that do different things, 
+        roughly split into the main categories of volatile, nonvolatile and opcodes, operands.
 
-The compiler is the real programmer hero of your C program. You tell it what you want your program to do
-it then decides how to best create the instructions and where they should go to get you what you want.
-Machines have many types of memory that do different things, 
-roughly split into the main categories of volatile, nonvolatile and opcodes, operands.
+        Volatile:  
+         - A global variable should be defined as volatile, if it's value may be changed between consecutive statements. 
+         - tells the compiler to always load a variable from RAM rather than caching it in a CPU register. 
+           assures that a variable altered by hardware or an ISR gets loaded and stored properly.
+         - a variable that's altered by hardware or an interrupt service routine will gets loaded and stored properly.
 
-Volatile:  
- - A global variable should be defined as volatile, if it's value may be changed between consecutive statements. 
- - tells the compiler to always load a variable from RAM rather than caching it in a CPU register. 
-   assures that a variable altered by hardware or an ISR gets loaded and stored properly.
- - a variable that's altered by hardware or an interrupt service routine will gets loaded and stored properly.
+        extern:
+         - tells the compiler that the variable is defined somewhere else, so it doesn't complain about it being undefined.
 
-extern:
- - tells the compiler that the variable is defined somewhere else, so it doesn't complain about it being undefined.
+        static:
+         - serves as a way of hiding the existence of a variable to the linker. 
+         - The variable is allocated once, and exists for the lifetime of the
+         - the variable maintains its value between invocations. 
+         - static outside function tells the compiler that this not visible in other C files
+         - leave the prototype function OUT of header file 
 
-static:
- - serves as a way of hiding the existence of a variable to the linker. 
- - The variable is allocated once, and exists for the lifetime of the
- - the variable maintains its value between invocations. 
- - static outside function tells the compiler that this not visible in other C files
- - leave the prototype function OUT of header file 
+        const:
+          - const is used to tell the compiler that the data is to be "read-only"
+          - usually in Program Space ?
 
-const:
-  - const is used to tell the compiler that the data is to be "read-only"
-  - usually in Program Space ?
 
+        malloc
+          - For AVR it has little if any relevance
+          - for machines with large memory 
+          - allocation of your free SRAM space into memory chunks, distinct from static memory allocation used by global variables
+            where the memory allocation is performed at compile time.
+          - Allocation on the heap is only done when using malloc() and similar C++ operator new 
+          - AVR memory is flash which is used for program storage not for volatile data during run time (SRAM).
 
-malloc
-  - For AVR it has little if any relevance
-  - for machines with large memory 
-  - allocation of your free SRAM space into memory chunks, distinct from static memory allocation used by global variables
-    where the memory allocation is performed at compile time.
-  - Allocation on the heap is only done when using malloc() and similar C++ operator new 
-  - AVR memory is flash which is used for program storage not for volatile data during run time (SRAM).
 
+        </pre>
 
-</pre>
 
+        <pre>
+        #ifndef _WHATEVER
+        #define _WHATEVER
+        #endif
 
-<pre>
-#ifndef _WHATEVER
-#define _WHATEVER
-#endif
+        -Include guards.
+        Once the header is included, it checks if a unique value is defined. Then if it's not defined, it defines it and continues to the rest of the page.
+        </pre>
 
--Include guards.
-Once the header is included, it checks if a unique value is defined. Then if it's not defined, it defines it and continues to the rest of the page.
-</pre>
+        <pre>
+        </pre>
 
-<pre>
-</pre>
 
 
 
+        <h2>Pointers</h2>
 
-==Pointers==
+        Basics
+        <pre>
 
-Basics
-<pre>
+        int a = 1; //allocate memory for var a
+        int b = a; //allocate memory for b and copy a's value 
+        b += 1;    //iterate b's value
+        //now a == 1 and b == 2
+        int a = 1;    //allocate memory for var a
+        int *b = &a;  //create a pointer to  var a named *b
+        *b += 1;      //iterate a , *b value is a pointer to the location of a in memory 
 
-int a = 1; //allocate memory for var a
-int b = a; //allocate memory for b and copy a's value 
-b += 1;    //iterate b's value
-//now a == 1 and b == 2
-int a = 1;    //allocate memory for var a
-int *b = &a;  //create a pointer to  var a named *b
-*b += 1;      //iterate a , *b value is a pointer to the location of a in memory 
 
+        //AVR 
+        int  a = 107; //ascii k
+        int *b = &a;
 
-//AVR 
-int  a = 107; //ascii k
-int *b = &a;
+        USART_transmit_0( *b ); //transmits a k
 
-USART_transmit_0( *b ); //transmits a k
+        USART_transmit_0( b ); //transmits address of k 
 
-USART_transmit_0( b ); //transmits address of k 
+        </pre>
 
-</pre>
 
+        <pre>
 
-<pre>
+        //Passing pointers as args:
 
-//Passing pointers as args:
+        Pointers (ie. the '*') should be used where the passing "NULL" is meaningful. 
 
-Pointers (ie. the '*') should be used where the passing "NULL" is meaningful. 
+        If the function that you're writing doesn't need to use NULL as a meaningful value then  (the '&') 
 
-If the function that you're writing doesn't need to use NULL as a meaningful value then  (the '&') 
+        </pre>
 
-</pre>
 
-
-Dereferencing
-<pre>
-if you have a  structure with data members, you can access those members using the -> dereferencing operator:
-
-typedef struct X { int i_; double d_; } X;
-X x;
-X* p = &x;
-p->d_ = 3.14159;  // dereference and access data member x.d_
-(*p).d_ *= -1;    // another equivalent notation for accessing x.d_
-
-</pre>
-
-arrow operator 
-gets the member called bar from the struct that foo points to
-<pre>
-foo->bar is equivalent to (*foo).bar,  
-</pre>
-
-
-Function pointers 
-
-<pre>
-#include <stdio.h>
-void my_int_func(int x)
-{
-    printf( "%d\n", x );
-}
-
-
-int main()
-{
-    void (*foo)(int);
-    foo = &my_int_func;
-
-    /* call my_int_func (note that you do not need to write (*foo)(2) ) */
-    foo( 2 );
-    /* but if you want to, you may */
-    (*foo)( 2 );
-
-    return 0;
-}
-
-</pre>
-
-
-
-<pre>
-//function to logical AND two bytes and put the result in location specified with a pointer
-
-uint8_t and_bits(uint8_t *byte, uint8_t byte_a, uint8_t byte_b){
-    *byte = 0xff;
-    *byte &= byte_a;
-    *byte &= byte_b;
-}
-
-//function to logical OR two bytes and put the result in location specified with a pointer
-
-uint8_t or_bits(uint8_t *byte, uint8_t byte_a, uint8_t byte_b){
-    *byte = 0x00;
-    *byte |= byte_a;
-    *byte |= byte_b;
-}
-</pre>
-
-==String, Chars , and arrays==
-<pre>
-
-//pointer to a char 
-char *foo = "abcdef";
-Serial.print(*foo); //prints "aaaaaaaaaaaaaaaaaa"
-Serial.print(foo);  //prints "abcdefabcdefabcdef"
-
-
-//C style Char array
-char oldString[] = "abcdefghijklmnopqrstuwxyz"; 
-Serial.print(oldString); //does what you think (a-z)
-//access an element
-Serial.print(oldString[6]);  //prints "gggggggg"
-
-
-
-//const char array
-char foo[4] = {'a','b','c','d'};
-
-//char string const
-//string is a null terminated char array
-char foo[] = "abcd";
-
-
-
-//get the length of a string 
-//Serial.print(strlen(oldString) );
-
-
-//strchr - Returns a pointer to the first occurrence of character in the C string str.
-//same as strstr except it includes terminating char - (null pointer?)
-//http://www.cplusplus.com/reference/cstring/strchr/
-//get a pointer to an element in a char array
-char oldString[] = "abcdefghijklmnopqrstuwxyz";   
-char *foo = strchr(oldString,'h') ;
-Serial.print(*foo);  //just h
-Serial.print(foo);   //everything after h
-
-//COPY A STRING
-const int max_string_len = 20;
-char strlist[] ="joe,john,jack";
-char stringBuffer[max_string_len+1];
-    
-char *str;
-char *p;
-strncpy(stringBuffer,strlist,max_string_len);
-Serial.print(stringBuffer);
-
-
-//TOKENIZE ABOVE EXAMPLE
-    for( str=strtok_r(stringBuffer,",",&p) ;
-         str; //loop while not null
-         str=strtok_r(NULL,",",&p)
-       )
-    {
-       Serial.println(str);
-    }
-
-
-
-strstr - Returns a pointer to the first occurrence of str2 in str1, or a null pointer if str2 is not part of str1.
-//http://www.cplusplus.com/reference/cstring/strstr/
-
-  char oldString[] = "abcdefghijklmnopqrstuwxyz"; 
-  char *foo = strstr(oldString,"k");
-  Serial.print(foo);//returns klmnopqrstuwxyz
-
-
-#DETECT A NULL POINTER
-  char oldString[] = "abcdef"; 
-  char *foo = strstr(oldString,"xxx");
-  if (foo==NULL){
-    Serial.print("NULL POINTER!");
-  }
-
-
-//INT TO ASCII
-char *c = itoa(i, 10)
-
-
-//STRING CONVERSION
-atoi - ASCII to int
-
-atol - ASCII to long 
-
-
-//compare two strings
-char str1[] = "left";
-char str2[] = "right";
-strcmp(str1,str2);
-//returns 0 if they are equal , >0 if the first char if greater val , otherwise less than 0 
-
-
-
-
-</pre>
-
-
-
-==AVR language notes==
-
-<pre>
-
-BOOLEAN 
-&& and
-|| or
-! logical-NOT operator.
-
-Tricks:
-!! - !!x is 1 if x is not zero and 0 otherwise.
-
-(integers can be implicitly cast to boolean values according to the rule that 0 is false and anything else is true. )
-
-</pre>
-
-Bitwise operators
-<pre>
-
-&   – AND 
-|   – OR 
-^   – XOR 
-<<  – Left shift
->>  - Right shift
-~   – NOT
-
-Truth table for AND:
- 0 AND 0 = 0
- 0 AND 1 = 0
- 1 AND 0 = 0
- 1 AND 1 = 1
- 
- Truth table for OR:
- 0 OR 0 = 0
- 0 OR 1 = 1
- 1 OR 0 = 1
- 1 OR 1 = 1
- 
- Truth table for XOR:
- 0 XOR 0 = 0
- 0 XOR 1 = 1
- 1 XOR 0 = 1
- 1 XOR 1 = 0
- 
- Truth table for NOT:
- NOT 0 = 1
- NOT 1 = 0
-
-
-BITMASKS / BIT SHIFTING
-~                   NOT - INVERTS
-|=                  OR EQUALS  *preserves*  (if masked with a  "1")
-&=                  AND EQUALS  *destroys*  (if masked with a  "1")
-^=                  XOR toggles 
-|=                  SET SINGLE BIT    
-&= ~(1<<2)          CLEAR SINGLE BIT             
-&=~ (1<<2)|(1<<1)   CLEAR MULTIPLE BITS USING OR  - 
-
-</pre>
-
-Read a single pin with AND
-<pre>
-value = (PIND & data_pin);
-</pre>
-
-
-Another example - masking multi pins
-<pre>
-#define MASK    (1<<PB0)|(1<<PB1)|(1<<PB2)|(1<<PB3)
- 
-if(PORTB & MASK){
-  //do some stuff when all your inputs are high
-}
-
-</pre>
-
-
-convert 16 bit data into 4 nibbles
-<pre>
-for (i=0; i<4; i++)
-{
-  uint8_t digit = (16bitdata & (0xf << (i*4))) >> (i*4);
-}
-</pre>
-
-==Bit Shifting==
-<pre>
-int alpha = (rgb >>> 24) & 0xFF;
-int red   = (rgb >>> 16) & 0xFF;
-int green = (rgb >>>  8) & 0xFF;
-int blue  = (rgb >>>  0) & 0xFF;
-</pre>
-
-<pre>
-
-int a = 5;        // binary: 0000000000000101
-int b = a << 3;   // binary: 0000000000101000, or 40 in decimal
-int c = b >> 3;   // binary: 0000000000000101, or back to 5 like we started with
-
-</pre>
-
-
-<pre>
-Bit Shift      Resulting Value In Hex
-
-1 <<  0         1
-1 <<  1         2
-1 <<  2         4
-1 <<  3         8
-
-0x01 << 1       0x02
-0x02 << 1       0x04
-0x04 << 1       0x08
-0x01 << 2       0x04
-0x01 << 3       0x08
-0x0F << 1       0x10
-
-Bit Shift       Resulting Value in Binary
-00000001 << 1 	 00000010
-00000001 << 2 	 00000100
-00001111 << 1 	 00011110
-00001111 << 2 	 00111100
-</pre>
-
-==More bit shifting tricks==
-
-Serializing a byte with bit shifts
-<pre>
-val = 0b00110011
-
-for (i = 0; i < 8; i++)  {
-	if (bitOrder == LSBFIRST)
-	    digitalWrite(dataPin, !!(val & (1 << i)));
-	else	
-	  digitalWrite(dataPin, !!(val & (1 << (7 - i))));
-}
-</pre>
-
-Count 16bits with two bytes (for example to address a 16bit eeprom)
-<pre>
-    int x=0;
-    
-    uint8_t low_byte = 0;
-    uint8_t high_byte = 0;
-   
-    for(x=0;x<65535;x++)
-    {
-        if(x<256){
-            high_byte = 0; 
-            low_byte  = x; 
-        }        
-        if(x>=256){
-            //high byte, shift all bits 8 places right
-            high_byte = (uint8_t)(x >> 8);
-            //low byte, clear the high byte
-            low_byte = (uint8_t)(x & 0x00FF);
+        Dereferencing
+        <pre>
+        if you have a  structure with data members, you can access those members using the -> dereferencing operator:
+
+        typedef struct X { int i_; double d_; } X;
+        X x;
+        X* p = &x;
+        p->d_ = 3.14159;  // dereference and access data member x.d_
+        (*p).d_ *= -1;    // another equivalent notation for accessing x.d_
+
+        </pre>
+
+        arrow operator 
+        gets the member called bar from the struct that foo points to
+        <pre>
+        foo->bar is equivalent to (*foo).bar,  
+        </pre>
+
+
+        Function pointers 
+
+        <pre>
+        #include <stdio.h>
+        void my_int_func(int x)
+        {
+            printf( "%d\n", x );
         }
-        
-        PORTL = low_byte;
-        PORTC = high_byte;
 
-        _delay_ms(10);
-    }
-</pre>
 
+        int main()
+        {
+            void (*foo)(int);
+            foo = &my_int_func;
 
-Masking examples
+            /* call my_int_func (note that you do not need to write (*foo)(2) ) */
+            foo( 2 );
+            /* but if you want to, you may */
+            (*foo)( 2 );
 
-<pre>
+            return 0;
+        }
 
-DDRB     = 0b11110000;
-DDRB    &= 0b00010000;
-#OUTPUT  =   00010000
+        </pre>
 
-----------
 
-#THESE BOTH DO THE SAME THING 
-PORTB ^= (1 << 0); 
-PORTB ^= 0x01;
 
-----------
+        <pre>
+        //function to logical AND two bytes and put the result in location specified with a pointer
 
-DDRB |= (1 << 0); // Set LED0 as output
-DDRB |= (1 << 1); // Set LED1 as output
-DDRB |= (1 << 2); // Set LED2 as output
+        uint8_t and_bits(uint8_t *byte, uint8_t byte_a, uint8_t byte_b){
+            *byte = 0xff;
+            *byte &= byte_a;
+            *byte &= byte_b;
+        }
 
--IS THE SAME AS- 
-DDRB |= (1 << 0|1 << 1|1 << 2); // Set LED 0-2 as output
+        //function to logical OR two bytes and put the result in location specified with a pointer
 
--OR-
+        uint8_t or_bits(uint8_t *byte, uint8_t byte_a, uint8_t byte_b){
+            *byte = 0x00;
+            *byte |= byte_a;
+            *byte |= byte_b;
+        }
+        </pre>
 
-DDRD = 0b00000111;
+        <h2>String, Chars , and arrays</h2>
+        <pre>
 
-</pre>
+        //pointer to a char 
+        char *foo = "abcdef";
+        Serial.print(*foo); //prints "aaaaaaaaaaaaaaaaaa"
+        Serial.print(foo);  //prints "abcdefabcdefabcdef"
 
-<pre>
-THIS IS FASTER (HALF THE INSTRUCTIONS)
-  PORTB ^= (1 << 0); // Toggle the LED
 
-THAN THIS 
-  //PORTB = 0x01;
-  //PORTB = 0x00;
-</pre>
+        //C style Char array
+        char oldString[] = "abcdefghijklmnopqrstuwxyz"; 
+        Serial.print(oldString); //does what you think (a-z)
+        //access an element
+        Serial.print(oldString[6]);  //prints "gggggggg"
 
 
-2 ways to set bits 0-1 as outputs
-<pre>
-  //DDRB = (1 <<PORTB0 | 1<<PORTB1);
 
-  //DDRB = 0x03;
+        //const char array
+        char foo[4] = {'a','b','c','d'};
 
-</pre>
+        //char string const
+        //string is a null terminated char array
+        char foo[] = "abcd";
 
-==TIMERS==
-TIMERS AND INTERRUPTS
 
-<pre>
 
-GO READ THIS AND READ IT AGAIN!
-http://www.avrfreaks.net/index.php?name=PNphpBB2&file=viewtopic&t=50106
-</pre>
+        //get the length of a string 
+        //Serial.print(strlen(oldString) );
 
-<pre>
 
-TCCRn   = Timer control register (contains WGM)
-COMn     = Compare Match Output (BITS INSIDE TCCRn)
-WGMn     = waveform generation mode (BITS INSIDE TCCRn)
-FOCn     = Force Output Compare  (BITS INSIDE TCCRn)
-CSn      = Clock Select (BITS INSIDE TCCRn)
+        //strchr - Returns a pointer to the first occurrence of character in the C string str.
+        //same as strstr except it includes terminating char - (null pointer?)
+        //http://www.cplusplus.com/reference/cstring/strchr/
+        //get a pointer to an element in a char array
+        char oldString[] = "abcdefghijklmnopqrstuwxyz";   
+        char *foo = strchr(oldString,'h') ;
+        Serial.print(*foo);  //just h
+        Serial.print(foo);   //everything after h
 
-OCR      = output compare registers 2 for each timer A and B
-TOVn     = The Timer/Counter Overflow Flag 
-TOP      = top of waveform 
-BOTTOM   = bottom of waveform
-TCCRn    = Timer control register - used to set prescalers, and activate timer 
-CTC      = clear timer on compare
+        //COPY A STRING
+        const int max_string_len = 20;
+        char strlist[] ="joe,john,jack";
+        char stringBuffer[max_string_len+1];
+            
+        char *str;
+        char *p;
+        strncpy(stringBuffer,strlist,max_string_len);
+        Serial.print(stringBuffer);
 
-TIFRn    = Timer/Counter Interrupt Flag Register
-TIMSK    = timer counter interrupt mask register - control interrupts
 
+        //TOKENIZE ABOVE EXAMPLE
+            for( str=strtok_r(stringBuffer,",",&p) ;
+                 str; //loop while not null
+                 str=strtok_r(NULL,",",&p)
+               )
+            {
+               Serial.println(str);
+            }
 
-</pre>
 
-<pre>
 
-Late night, drunken concepts 
+        strstr - Returns a pointer to the first occurrence of str2 in str1, or a null pointer if str2 is not part of str1.
+        //http://www.cplusplus.com/reference/cstring/strstr/
 
-The C/C++ langauge knows nothing of interrupts, timers, etc , it is what "pulls the levers" of the hardware
-The chip has internal clock (RC) or external clock source - all operations governed by this 
-the timer(s) counts these pulses- asynchronosly 
-both timer and system clock have a precale option , a divider to "slow" down the clock
-timers can be 8 or 16 bit , 255 or 65,535 
-timers can overflow, overflows can be counted to extend beyond the maximum value
-timers can have more than one comparison per timer (OCR0A, OCR0b, etc) 
-the OCR may be tied into a hardware pins via "OC" pins - check datasheet
+          char oldString[] = "abcdefghijklmnopqrstuwxyz"; 
+          char *foo = strstr(oldString,"k");
+          Serial.print(foo);//returns klmnopqrstuwxyz
 
 
-timers can run in several modes :
--fast pwm = half wave, up and reset
--phase correct pwm = full wave up and back down 
--ctc - clear on compare
+        #DETECT A NULL POINTER
+          char oldString[] = "abcdef"; 
+          char *foo = strstr(oldString,"xxx");
+          if (foo==NULL){
+            Serial.print("NULL POINTER!");
+          }
 
-</pre>
 
-<pre>
-drunken part two:
+        //INT TO ASCII
+        char *c = itoa(i, 10)
 
-basic stategies for using a timer
 
-1 -count on each clock pulse, poll TCNT , reset it when adequate - slow ineffecient 
-2 -use "CTC mode"  - less operations, hardware but still polling
-3 -use CTC and interrupts -hardawre, NOT polling
-4 -?
+        //STRING CONVERSION
+        atoi - ASCII to int
 
+        atol - ASCII to long 
 
-</pre>
 
+        //compare two strings
+        char str1[] = "left";
+        char str2[] = "right";
+        strcmp(str1,str2);
+        //returns 0 if they are equal , >0 if the first char if greater val , otherwise less than 0 
 
-<pre>
 
-An interrupt can be generated each time the counter value reaches the TOP value by using the OCF0A Flag
 
-make sure you read data sheet - some timers are 8 bit, others 16
-8 bit timer counts to 255, 16 bit to 65,535 (with no prescaler)
 
-TCNTn  = timer count register - can be queried or set directly 
-OCn = output compare - matches counter level 
-CTC - clear timer on compare (resets after a read of level) 
+        </pre>
 
-For generating a waveform output in CTC mode, the OC0A output can be set to toggle its logical level on each compare match
-The OC0A value will not be visible on the port pin unless the data direction for the pin is set to output. 
 
-The fast PWM mode provides a high frequency PWM waveform generation option.
-In fast PWM mode, the counter is incremented until the counter value matches the TOP value.
-The counter is then cleared at the following timer clock cycle.
 
-In noninverting Compare Output mode, the Output Compare (OC0x) is cleared on the compare match
-between TCNT0 and OCR0x, and set at BOTTOM. 
+        <h2>AVR language notes</h2>
 
-In inverting Compare Output mode, the output is set on compare match and cleared at BOTTOM. Due to the single-slope operation, the
-operating frequency of the fast PWM mode can be twice as high as the phase correct PWM
-mode that use dual-slope operation. 
+        <pre>
 
+        BOOLEAN 
+        && and
+        || or
+        ! logical-NOT operator.
 
-The phase correct PWM mode provides a high resolution PWM waveform. The phase correct PWM mode is based on a dual-slope
-operation. The counter counts repeatedly from BOTTOM to TOP and then from TOP to BOTTOM. 
-</pre>
+        Tricks:
+        !! - !!x is 1 if x is not zero and 0 otherwise.
 
-<pre>
-The TCNT1, OCR1A/B, and ICR1 are 16-bit registers that can be accessed by the AVR CPU via
-the 8-bit data bus. The 16-bit register must be byte accessed using two read or write operations.
-Each 16-bit timer has a single 8-bit register for temporary storing of the high byte of the 16-bit
-access. The same temporary register is shared between all 16-bit registers within each 16-bit
-timer. Accessing the low byte triggers the 16-bit read or write operation. When the low byte of a
-16-bit register is written by the CPU, the high byte stored in the temporary register, and the low
-byte written are both copied into the 16-bit register in the same clock cycle. When the low byte of
-a 16-bit register is read by the CPU, the high byte of the 16-bit register is copied into the tempo-
-rary register in the same clock cycle as the low byte is read.
+        (integers can be implicitly cast to boolean values according to the rule that 0 is false and anything else is true. )
 
-To do a 16-bit write, the high byte must be written before the low byte. For a 16-bit read, the low
-byte must be read before the high byte.
+        </pre>
 
-</pre>
+        Bitwise operators
+        <pre>
 
+        &   – AND 
+        |   – OR 
+        ^   – XOR 
+        <<  – Left shift
+        >>  - Right shift
+        ~   – NOT
 
-<pre>
-CALCULATING YOUR TIMER SPEED: 
+        Truth table for AND:
+         0 AND 0 = 0
+         0 AND 1 = 0
+         1 AND 0 = 0
+         1 AND 1 = 1
+         
+         Truth table for OR:
+         0 OR 0 = 0
+         0 OR 1 = 1
+         1 OR 0 = 1
+         1 OR 1 = 1
+         
+         Truth table for XOR:
+         0 XOR 0 = 0
+         0 XOR 1 = 1
+         1 XOR 0 = 1
+         1 XOR 1 = 0
+         
+         Truth table for NOT:
+         NOT 0 = 1
+         NOT 1 = 0
 
-//http://www.avrfreaks.net/index.php?name=PNphpBB2&file=viewtopic&t=50106
-Timer Resolution = (1 / Input Frequency) 
 
-Example at 100hz:
-Timer Resolution = (1 / Input Frequency)
-Timer Resolution = (1 / 100)
-Timer Resolution = .01 seconds 
+        BITMASKS / BIT SHIFTING
+        ~                   NOT - INVERTS
+        |=                  OR EQUALS  *preserves*  (if masked with a  "1")
+        &=                  AND EQUALS  *destroys*  (if masked with a  "1")
+        ^=                  XOR toggles 
+        |=                  SET SINGLE BIT    
+        &= ~(1<<2)          CLEAR SINGLE BIT             
+        &=~ (1<<2)|(1<<1)   CLEAR MULTIPLE BITS USING OR  - 
+
+        </pre>
+
+        Read a single pin with AND
+        <pre>
+        value = (PIND & data_pin);
+        </pre>
+
+
+        Another example - masking multi pins
+        <pre>
+        #define MASK    (1<<PB0)|(1<<PB1)|(1<<PB2)|(1<<PB3)
+         
+        if(PORTB & MASK){
+          //do some stuff when all your inputs are high
+        }
+
+        </pre>
 
-CTC - OCF1A can be cleared by writing a logic 1 to its bit location, (all interrupt bits do this)
 
-</pre>
+        convert 16 bit data into 4 nibbles
+        <pre>
+        for (i=0; i<4; i++)
+        {
+          uint8_t digit = (16bitdata & (0xf << (i*4))) >> (i*4);
+        }
+        </pre>
 
+        <h2>Bit Shifting</h2>
+        <pre>
+        int alpha = (rgb >>> 24) & 0xFF;
+        int red   = (rgb >>> 16) & 0xFF;
+        int green = (rgb >>>  8) & 0xFF;
+        int blue  = (rgb >>>  0) & 0xFF;
+        </pre>
 
-<pre>
-Example at 1Mhz Clock , .05 Hz Timer:
+        <pre>
 
-Target Timer Count = (1 / Target Frequency) / (1 / Timer Clock Frequency) - 1
-                   = (1 / 20) / (1 / 1000000) - 1
-                   = .05 / 0.000001 - 1
-                   = 50000 - 1
-                   = 49999 
-</pre>
+        int a = 5;        // binary: 0000000000000101
+        int b = a << 3;   // binary: 0000000000101000, or 40 in decimal
+        int c = b >> 3;   // binary: 0000000000000101, or back to 5 like we started with
 
+        </pre>
 
-Source code for above (really works, but only with 16 bit timer)
-<pre>
-#include <avr/io.h>
 
-int main (void)
-{
-   DDRB |= (1 << 0); // Set LED as output
+        <pre>
+        Bit Shift      Resulting Value In Hex
 
-   TCCR1B |= (1 << CS10); // Set up timer
+        1 <<  0         1
+        1 <<  1         2
+        1 <<  2         4
+        1 <<  3         8
 
-   for (;;)
-   {
-      // Check timer value in if statement, true when count matches 1/20 of a second
-      if (TCNT1 >= 49999)
-      {
-         PORTB ^= (1 << 0); // Toggle the LED
+        0x01 << 1       0x02
+        0x02 << 1       0x04
+        0x04 << 1       0x08
+        0x01 << 2       0x04
+        0x01 << 3       0x08
+        0x0F << 1       0x10
 
-         TCNT1 = 0; // Reset timer value
-      }
-   }
-} 
-</pre>
+        Bit Shift       Resulting Value in Binary
+        00000001 << 1    00000010
+        00000001 << 2    00000100
+        00001111 << 1    00011110
+        00001111 << 2    00111100
+        </pre>
 
+        <h2>More bit shifting tricks</h2>
 
-TIMER IN CTC MODE (FROM DEAN CAMERA'S EXAMPLES) - Modified for mega328p
-<pre>
-# include <avr/io.h>
+        Serializing a byte with bit shifts
+        <pre>
+        val = 0b00110011
 
+        for (i = 0; i < 8; i++)  {
+            if (bitOrder == LSBFIRST)
+                digitalWrite(dataPin, !!(val & (1 << i)));
+            else    
+              digitalWrite(dataPin, !!(val & (1 << (7 - i))));
+        }
+        </pre>
 
-int main ( void )
-{
-  DDRB |= (1 << 0) ; // Set LED as output
-  TCCR1B |= (1 << WGM12 ) ; // Configure timer 1 for CTC mode
-  OCR1A  = 15624; // Set CTC compare value to 1 Hz at 1 MHz AVR clock , with a prescaler of 64
-  TCCR1B |= ((1 << CS10 ) | (1 << CS11 ) ) ; // Start timer at Fcpu /64
-  for (;;)
-  {
-    if ( TIFR1 & (1 << OCF1A ) )
-    {
-      PORTB ^= (1 << 0) ; // Toggle the LED
-      TIFR1 = (1 << OCF1A ) ; // clear the CTC flag ( writing a logic one to the set flag clears it )
-    }
-  }
-}
-</pre>
+        Count 16bits with two bytes (for example to address a 16bit eeprom)
+        <pre>
+            int x=0;
+            
+            uint8_t low_byte = 0;
+            uint8_t high_byte = 0;
+           
+            for(x=0;x<65535;x++)
+            {
+                if(x<256){
+                    high_byte = 0; 
+                    low_byte  = x; 
+                }        
+                if(x>=256){
+                    //high byte, shift all bits 8 places right
+                    high_byte = (uint8_t)(x >> 8);
+                    //low byte, clear the high byte
+                    low_byte = (uint8_t)(x & 0x00FF);
+                }
+                
+                PORTL = low_byte;
+                PORTC = high_byte;
 
-==PWM==
+                _delay_ms(10);
+            }
+        </pre>
 
-<pre>
-+Set Waveform Generation Modes (WGM) 
-+Set period - ICR register
-+Determine Prescaler
-+Determine Output Mode (inverted/non inverted)
-+Uses OCR1A , OCR1B
 
-CTC (clear timer compare) option of ICR1 , OCR1A
-</pre>
+        Masking examples
 
-WGM's
-<pre>
-Phase Correct (Up , down)
+        <pre>
 
-Fast PWM (Up , Flat )
+        DDRB     = 0b11110000;
+        DDRB    &= 0b00010000;
+        #OUTPUT  =   00010000
 
-8,9,10 bit - 255,512,1024
+        ----------
 
-</pre>
+        #THESE BOTH DO THE SAME THING 
+        PORTB ^= (1 << 0); 
+        PORTB ^= 0x01;
 
-NOTES
-<pre>
-The Timer/Counter Overflow Flag (TOV0) is set each time the counter reaches BOTTOM
+        ----------
 
-</pre>
+        DDRB |= (1 << 0); // Set LED0 as output
+        DDRB |= (1 << 1); // Set LED1 as output
+        DDRB |= (1 << 2); // Set LED2 as output
 
+        -IS THE SAME AS- 
+        DDRB |= (1 << 0|1 << 1|1 << 2); // Set LED 0-2 as output
 
+        -OR-
 
-WRITE PWM ATTINY85
-<pre>
- #define F_CPU 9600000UL // Define software reference clock for delay duration
- #include <avr/io.h>
- #include <util/delay.h>
- #define LED PB0
- int i ;
- 
- int main (void)
- {
- DDRB |= (1 << LED); // OC0A on PB0
- 
- TCCR0A |= ((1 << COM0A1) | (1 << COM0A0) // COM0A1 - COM0A0 (Set OC0A on Compare Match, clear OC0A at TOP)
- | (1 << WGM01) | (1 << WGM00)); // WGM01 - WGM00 (set fast PWM)
- OCR0A = 0; // initialize Output Compare Register A to 0
- TCCR0B |= (1 << CS01); // Start timer at Fcpu / 256
- 
-	 for (;;)
-	 {
-	 
-		 for (i = 0 ; i < 255 ; i++ ) // For loop (Up counter 0 - 255)
-		 {
-			 OCR0A = i; // Update Output Compare Register (PWM 0 - 255)
-			 _delay_ms(100);
-		 }
-		 
-		 for (i = 255 ; i > 1 ; i-- ) // For loop (down counter 255 - 0 )
-		 {
-			 OCR0A = i; // Update Output Compare Register (PWM 0 - 255)
-			 _delay_ms(100);
-		 }
-	 }
- }
-</pre>
+        DDRD = 0b00000111;
 
+        </pre>
 
-EXTERNAL INTERRUPT (PIN CHNAGE)
-<pre>
-#include <avr/io.h>
-#include <avr/interrupt.h>
+        <pre>
+        THIS IS FASTER (HALF THE INSTRUCTIONS)
+          PORTB ^= (1 << 0); // Toggle the LED
 
+        THAN THIS 
+          //PORTB = 0x01;
+          //PORTB = 0x00;
+        </pre>
 
-int main(void)
-{
-    DDRD &= ~(1 << DDD2);     // Clear the PD2 pin
-    // PD2 (PCINT0 pin) is now an input
 
-    PORTD |= (1 << PORTD2);    // turn On the Pull-up
-    // PD2 is now an input with pull-up enabled
+        2 ways to set bits 0-1 as outputs
+        <pre>
+          //DDRB = (1 <<PORTB0 | 1<<PORTB1);
 
+          //DDRB = 0x03;
 
+        </pre>
 
-    EICRA |= (1 << ISC00);    // set INT0 to trigger on ANY logic change
-    EIMSK |= (1 << INT0);     // Turns on INT0
+        <h2>TIMERS</h2>
+        TIMERS AND INTERRUPTS
 
-    sei();                    // turn on interrupts
+        <pre>
 
-    while(1)
-    {
-        /*main program loop here */
-    }
-}
+        GO READ THIS AND READ IT AGAIN!
+        http://www.avrfreaks.net/index.php?name=PNphpBB2&file=viewtopic&t=50106
+        </pre>
 
+        <pre>
 
+        TCCRn   = Timer control register (contains WGM)
+        COMn     = Compare Match Output (BITS INSIDE TCCRn)
+        WGMn     = waveform generation mode (BITS INSIDE TCCRn)
+        FOCn     = Force Output Compare  (BITS INSIDE TCCRn)
+        CSn      = Clock Select (BITS INSIDE TCCRn)
 
-ISR (INT0_vect)
-{
-    /* interrupt code here */
-}
+        OCR      = output compare registers 2 for each timer A and B
+        TOVn     = The Timer/Counter Overflow Flag 
+        TOP      = top of waveform 
+        BOTTOM   = bottom of waveform
+        TCCRn    = Timer control register - used to set prescalers, and activate timer 
+        CTC      = clear timer on compare
 
-</pre>
+        TIFRn    = Timer/Counter Interrupt Flag Register
+        TIMSK    = timer counter interrupt mask register - control interrupts
 
 
+        </pre>
 
-READ PWM
-<pre>
-#to read PWM - you combine a pin change (external interrupt) with a timer
-#start the timer , then reset if a pin changes and grab the time value
+        <pre>
 
+        Late night, drunken concepts 
 
-#include <avr/io.h>
-#include <avr/interrupt.h>
+        The C/C++ langauge knows nothing of interrupts, timers, etc , it is what "pulls the levers" of the hardware
+        The chip has internal clock (RC) or external clock source - all operations governed by this 
+        the timer(s) counts these pulses- asynchronosly 
+        both timer and system clock have a precale option , a divider to "slow" down the clock
+        timers can be 8 or 16 bit , 255 or 65,535 
+        timers can overflow, overflows can be counted to extend beyond the maximum value
+        timers can have more than one comparison per timer (OCR0A, OCR0b, etc) 
+        the OCR may be tied into a hardware pins via "OC" pins - check datasheet
 
-volatile uint16_t tick; 
 
-int main(void)
-{
+        timers can run in several modes :
+        -fast pwm = half wave, up and reset
+        -phase correct pwm = full wave up and back down 
+        -ctc - clear on compare
 
-    DDRB = 0x08;//output LED 
+        </pre>
 
+        <pre>
+        drunken part two:
 
-    DDRD &= ~(1 << DDD2);     // Clear the PD2 pin
-    PORTD |= (1 << PORTD2);    // turn On the Pull-up
+        basic stategies for using a timer
 
-    EICRA |= (1 << ISC00);    // set INT0 to trigger on ANY logic change
-    EIMSK |= (1 << INT0);     // Turns on INT0
-    sei();                    // turn on interrupts
+        1 -count on each clock pulse, poll TCNT , reset it when adequate - slow ineffecient 
+        2 -use "CTC mode"  - less operations, hardware but still polling
+        3 -use CTC and interrupts -hardawre, NOT polling
+        4 -?
 
-    //timer stuff
-    TCCR1B = 1; //start Timer1
 
+        </pre>
 
-    /////
-    while(1)
-    {
-    }
-}
 
+        <pre>
 
+        An interrupt can be generated each time the counter value reaches the TOP value by using the OCF0A Flag
 
-ISR (INT0_vect)
-{
-   //PORTB ^= 0x08;  //TO TEST 
-   tick=TCNT1;
-   //WE HAVE A CAPTURE VALUE! = tick
-   if (tick<250)
-   {
-      PORTB = 0x08;
-   }else{
-      PORTB = 0x00;
-   }
+        make sure you read data sheet - some timers are 8 bit, others 16
+        8 bit timer counts to 255, 16 bit to 65,535 (with no prescaler)
 
+        TCNTn  = timer count register - can be queried or set directly 
+        OCn = output compare - matches counter level 
+        CTC - clear timer on compare (resets after a read of level) 
 
-   TCNT1=0;
-}
+        For generating a waveform output in CTC mode, the OC0A output can be set to toggle its logical level on each compare match
+        The OC0A value will not be visible on the port pin unless the data direction for the pin is set to output. 
 
+        The fast PWM mode provides a high frequency PWM waveform generation option.
+        In fast PWM mode, the counter is incremented until the counter value matches the TOP value.
+        The counter is then cleared at the following timer clock cycle.
 
-</pre>
+        In noninverting Compare Output mode, the Output Compare (OC0x) is cleared on the compare match
+        between TCNT0 and OCR0x, and set at BOTTOM. 
 
-==SPI==
+        In inverting Compare Output mode, the output is set on compare match and cleared at BOTTOM. Due to the single-slope operation, the
+        operating frequency of the fast PWM mode can be twice as high as the phase correct PWM
+        mode that use dual-slope operation. 
 
-<pre>
- http://avrbeginners.net/architecture/spi/spi.html
-</pre>
 
-<pre>
- DORD (Data Order) bit
- Set DORD to one to send the least significant bit (LSB) first.
- Set DORD to zero to  send the most significant bit (MSB) first.
+        The phase correct PWM mode provides a high resolution PWM waveform. The phase correct PWM mode is based on a dual-slope
+        operation. The counter counts repeatedly from BOTTOM to TOP and then from TOP to BOTTOM. 
+        </pre>
 
- CPOL (Clock Polarity) 
- CPOL is set to one, SCK is high when idle, 
- CPOL is set to zero, SCK is low when idle
+        <pre>
+        The TCNT1, OCR1A/B, and ICR1 are 16-bit registers that can be accessed by the AVR CPU via
+        the 8-bit data bus. The 16-bit register must be byte accessed using two read or write operations.
+        Each 16-bit timer has a single 8-bit register for temporary storing of the high byte of the 16-bit
+        access. The same temporary register is shared between all 16-bit registers within each 16-bit
+        timer. Accessing the low byte triggers the 16-bit read or write operation. When the low byte of a
+        16-bit register is written by the CPU, the high byte stored in the temporary register, and the low
+        byte written are both copied into the 16-bit register in the same clock cycle. When the low byte of
+        a 16-bit register is read by the CPU, the high byte of the 16-bit register is copied into the tempo-
+        rary register in the same clock cycle as the low byte is read.
 
- CPHA (Clock Phase) bits:
- set CPHA to sample the data on the trailing (last) edge,  
- clear CPHA to sample the data in the leading (first) edge
+        To do a 16-bit write, the high byte must be written before the low byte. For a 16-bit read, the low
+        byte must be read before the high byte.
 
-  MSTR (Master/Slave Select)
-  Set MSTR to configure the AVR as a Master SPI device. 
-  Clear MSTR to configure it as a Slave.
+        </pre>
 
 
-SPI     Mode 	CPOL 	CPHA 	Sample
-0 	0 	0 	Leading (Rising) Edge
-1 	0 	1 	Trailing (Falling) Edge
-2 	1 	0 	Leading (Falling) Edge
-3 	1 	1 	Trailing (Rising) Edge
+        <pre>
+        CALCULATING YOUR TIMER SPEED: 
 
+        //http://www.avrfreaks.net/index.php?name=PNphpBB2&file=viewtopic&t=50106
+        Timer Resolution = (1 / Input Frequency) 
 
-SPR1 and SPR2 (SPI Clock Rate Select) bits: 
+        Example at 100hz:
+        Timer Resolution = (1 / Input Frequency)
+        Timer Resolution = (1 / 100)
+        Timer Resolution = .01 seconds 
 
-The frequency of the SPI clock is related to the frequency of the AVR oscillator. 
-The faster the SPI clock signal is, the faster the data trasfer will be, however, you must respect the maximum clock frequency specified by the Slave 
+        CTC - OCF1A can be cleared by writing a logic 1 to its bit location, (all interrupt bits do this)
 
-SPR1 	SPR0 	SCK frequency
-0 	0 	fosc/4
-0 	1 	fosc/16
-1 	0 	fosc/64
-1 	1 	fosc/128
+        </pre>
 
 
-</pre>
+        <pre>
+        Example at 1Mhz Clock , .05 Hz Timer:
 
-==UART==
+        Target Timer Count = (1 / Target Frequency) / (1 / Timer Clock Frequency) - 1
+                           = (1 / 20) / (1 / 1000000) - 1
+                           = .05 / 0.000001 - 1
+                           = 50000 - 1
+                           = 49999 
+        </pre>
 
-SEE ALSO [[Serial_com]]
 
-<pre>
-Data Register Empty UDRE
-Transmit Complete TXC0
-Receive Complete RXC0
+        Source code for above (really works, but only with 16 bit timer)
+        <pre>
+        #include <avr/io.h>
 
-UBRR - Clock generator registers (16 bit , LOW and HIGH 8 bit REGISTERS )
+        int main (void)
+        {
+           DDRB |= (1 << 0); // Set LED as output
 
-UBRRH - high
-UBRRL - low
+           TCCR1B |= (1 << CS10); // Set up timer
 
-Transmitter registers
-UDR
+           for (;;)
+           {
+              // Check timer value in if statement, true when count matches 1/20 of a second
+              if (TCNT1 >= 49999)
+              {
+                 PORTB ^= (1 << 0); // Toggle the LED
 
-Receiver registers
-UCSRA UCSRB UCSRC
+                 TCNT1 = 0; // Reset timer value
+              }
+           }
+        } 
+        </pre>
 
-MORE INFO - 
 
-############
-BITS IN UCSRA:
+        TIMER IN CTC MODE (FROM DEAN CAMERA'S EXAMPLES) - Modified for mega328p
+        <pre>
+        # include <avr/io.h>
 
-RXC - bit is set when the USART has completed receiving a byte from the host (may be your PC) and the program should read it from UDR
-TXC - bit is set (1) when the USART has completed transmitting a byte to the host and your program can write new data to USART via UDR
 
+        int main ( void )
+        {
+          DDRB |= (1 << 0) ; // Set LED as output
+          TCCR1B |= (1 << WGM12 ) ; // Configure timer 1 for CTC mode
+          OCR1A  = 15624; // Set CTC compare value to 1 Hz at 1 MHz AVR clock , with a prescaler of 64
+          TCCR1B |= ((1 << CS10 ) | (1 << CS11 ) ) ; // Start timer at Fcpu /64
+          for (;;)
+          {
+            if ( TIFR1 & (1 << OCF1A ) )
+            {
+              PORTB ^= (1 << 0) ; // Toggle the LED
+              TIFR1 = (1 << OCF1A ) ; // clear the CTC flag ( writing a logic one to the set flag clears it )
+            }
+          }
+        }
+        </pre>
 
-#HALF/DOUBLE THE SPEED
-UCSRA |= (1 << U2X);
+        <h2>PWM</h2>
 
-############
-BITS IN UCSRB:
+        <pre>
+        +Set Waveform Generation Modes (WGM) 
+        +Set period - ICR register
+        +Determine Prescaler
+        +Determine Output Mode (inverted/non inverted)
+        +Uses OCR1A , OCR1B
 
-RXCIE: Receive Complete Interrupt Enable - When this bit is written one the the associated interrupt is enabled.
+        CTC (clear timer compare) option of ICR1 , OCR1A
+        </pre>
 
-TXCIE: Transmit Complete Interrupt Enable - When this bit is written one the the associated interrupt is enabled.
+        WGM's
+        <pre>
+        Phase Correct (Up , down)
 
-RXEN: Receiver Enable - When you write this bit to 1 the USART receiver is enabled. The normal port functionality of RX pin will be overridden. So you see that the associated I/O pin now switch to its secondary function,i.e. RX for USART.
+        Fast PWM (Up , Flat )
 
-TXEN: Transmitter Enable
+        8,9,10 bit - 255,512,1024
 
-UCSZ2: USART Character Size
+        </pre>
 
-############
-BITS IN UCSRC:
+        NOTES
+        <pre>
+        The Timer/Counter Overflow Flag (TOV0) is set each time the counter reaches BOTTOM
 
+        </pre>
 
-#############
-UCSZ: USART Character size - These three bits (one in the UCSRB) selects the number of bits of data that is transmited in each frame. Normally the unit of data in MCU is 8BIT (C type "char") and this is most widely used so we will go for this. Otherwise you can select 5,6,7,8 or 9 bit frames!
 
-#############
-UBRR: USART Baud Rate Register:
 
-This is the USART Baud rate register, it is 16BIT wide so UBRRH is the High Byte and UBRRL is Low byte. But as we are using C language it is directly available as UBRR and compiler manages the 16BIT access. This register is used by the USART to generate the data transmission at specified speed (say 9600Bps). 
+        WRITE PWM ATTINY85
+        <pre>
+         #define F_CPU 9600000UL // Define software reference clock for delay duration
+         #include <avr/io.h>
+         #include <util/delay.h>
+         #define LED PB0
+         int i ;
+         
+         int main (void)
+         {
+         DDRB |= (1 << LED); // OC0A on PB0
+         
+         TCCR0A |= ((1 << COM0A1) | (1 << COM0A0) // COM0A1 - COM0A0 (Set OC0A on Compare Match, clear OC0A at TOP)
+         | (1 << WGM01) | (1 << WGM00)); // WGM01 - WGM00 (set fast PWM)
+         OCR0A = 0; // initialize Output Compare Register A to 0
+         TCCR0B |= (1 << CS01); // Start timer at Fcpu / 256
+         
+             for (;;)
+             {
+             
+                 for (i = 0 ; i < 255 ; i++ ) // For loop (Up counter 0 - 255)
+                 {
+                     OCR0A = i; // Update Output Compare Register (PWM 0 - 255)
+                     _delay_ms(100);
+                 }
+                 
+                 for (i = 255 ; i > 1 ; i-- ) // For loop (down counter 255 - 0 )
+                 {
+                     OCR0A = i; // Update Output Compare Register (PWM 0 - 255)
+                     _delay_ms(100);
+                 }
+             }
+         }
+        </pre>
 
 
-baud rate=(system clock frequency)/(2(UBRR + 1)),
+        EXTERNAL INTERRUPT (PIN CHNAGE)
+        <pre>
+        #include <avr/io.h>
+        #include <avr/interrupt.h>
 
-UBRR=((system clock generator)/(16 × baud rate))- 1
 
-</pre>
+        int main(void)
+        {
+            DDRD &= ~(1 << DDD2);     // Clear the PD2 pin
+            // PD2 (PCINT0 pin) is now an input
 
+            PORTD |= (1 << PORTD2);    // turn On the Pull-up
+            // PD2 is now an input with pull-up enabled
 
-easy serial console in linux 
-<pre>
 
-screen /dev/ttyUSB0 115200
 
-//    to exit screen: Ctrl-a k
+            EICRA |= (1 << ISC00);    // set INT0 to trigger on ANY logic change
+            EIMSK |= (1 << INT0);     // Turns on INT0
 
-</pre>
+            sei();                    // turn on interrupts
 
+            while(1)
+            {
+                /*main program loop here */
+            }
+        }
 
 
 
+        ISR (INT0_vect)
+        {
+            /* interrupt code here */
+        }
 
-EXAMPLE 2313 UART TRANSMIT
-<pre>
-/*
- ATTINY2313 
- HFUSE=D4
- LFUSE=E4
- EFUSE=FF
- */
+        </pre>
 
-#define F_CPU 16000000
-#define BAUD 9600
 
-#include <avr/io.h>
-#include <util/delay.h>
-#include <util/setbaud.h>
 
-void inituart(void)
-{
-   UBRRH = UBRRH_VALUE;
-   UBRRL = UBRRL_VALUE;
+        READ PWM
+        <pre>
+        #to read PWM - you combine a pin change (external interrupt) with a timer
+        #start the timer , then reset if a pin changes and grab the time value
 
-   //found this , seems relavant 
-   UCSRA |= (1 << U2X);
 
+        #include <avr/io.h>
+        #include <avr/interrupt.h>
 
-   UCSRB = (1 << RXEN)  | (1 << TXEN);      // Enable UART receiver and transmitter
-   UCSRC = (1 << UCSZ1) | (1 << UCSZ0);   // set to 8 data bits, 1 stop bit
-}
+        volatile uint16_t tick; 
 
+        int main(void)
+        {
 
-void transmitbyte (unsigned char data)
-{   
-   while (!(UCSRA & (1 << UDRE)));   // Wait for empty transmit buffer
-   UDR = data;                  // Start transmittion
-}
+            DDRB = 0x08;//output LED 
 
 
-int main(void) {
-   DDRB |= 1<<PB0;   /* set PB0 to output */
-   inituart();
-    while(1) {
-        transmitbyte('a');
-        transmitbyte('b');
-        transmitbyte('c');
-        transmitbyte('d');
+            DDRD &= ~(1 << DDD2);     // Clear the PD2 pin
+            PORTD |= (1 << PORTD2);    // turn On the Pull-up
 
-      _delay_ms(10);
-      PORTB ^= 1<<PB0;
-    }
-    return 0;
-} 
-</pre>
+            EICRA |= (1 << ISC00);    // set INT0 to trigger on ANY logic change
+            EIMSK |= (1 << INT0);     // Turns on INT0
+            sei();                    // turn on interrupts
 
-==Read data on a port==
+            //timer stuff
+            TCCR1B = 1; //start Timer1
 
 
-EXAMPLE PROGRAMS WITH INPUT/OUTPUT 
+            /////
+            while(1)
+            {
+            }
+        }
 
 
-read from one port and write to another 
-<pre>
-#include <avr/io.h>
-#include <util/delay.h>
 
+        ISR (INT0_vect)
+        {
+           //PORTB ^= 0x08;  //TO TEST 
+           tick=TCNT1;
+           //WE HAVE A CAPTURE VALUE! = tick
+           if (tick<250)
+           {
+              PORTB = 0x08;
+           }else{
+              PORTB = 0x00;
+           }
 
-int main (void)
-{
-  // set PORTB for output
-  DDRB = 0xFF;
-  //set PORTA as input
-  DDRA = 0x00;
 
-  PORTA = 0X00;
-  
-  int del = 100;
- 
-  //to make lower nibble of port a as output, higher nibble as input with pull-ups enabled
-  //DDRB  = 0x0F;        //lower nib> output, higher nib> input
-  //PORTB = 0xF0;        //lower nib> set output pins to 0, 
+           TCNT1=0;
+        }
 
-					 
-  while (1)
-    {
-	
-      PORTB = 0x00;
-	  if(PINA==0x01)      
-      {
-            PORTB=0X01;   
-      }
-	  if(PINA==0x00)      
-      {
-            PORTB=0X00;   
-      }	 
-	   _delay_ms(del);
-	   
-	   
-	   //clear 
-	   PORTB = 0x00;
-	   PORTB =0Xff;
-	    _delay_ms(del);
-  
-	  
-    }
 
-  return 1;
-}
-</pre>
+        </pre>
 
+        <h2>SPI</h2>
 
+        <pre>
+         http://avrbeginners.net/architecture/spi/spi.html
+        </pre>
 
-==Digital Analog Converter==
+        <pre>
+         DORD (Data Order) bit
+         Set DORD to one to send the least significant bit (LSB) first.
+         Set DORD to zero to  send the most significant bit (MSB) first.
 
-analog to digital conversion
+         CPOL (Clock Polarity) 
+         CPOL is set to one, SCK is high when idle, 
+         CPOL is set to zero, SCK is low when idle
 
-<pre>
- 10bit data is split it into 2 8 bit registers ADCH and ADCL.  
+         CPHA (Clock Phase) bits:
+         set CPHA to sample the data on the trailing (last) edge,  
+         clear CPHA to sample the data in the leading (first) edge
 
- when you read the ADCL register ,  the ADCH causes to ADC to update.  
+          MSTR (Master/Slave Select)
+          Set MSTR to configure the AVR as a Master SPI device. 
+          Clear MSTR to configure it as a Slave.
 
-two fundamental operation modes: Single Conversion and Free Running. 
-In Single Conversion mode, you have to initiate each conversion. When it is done, the result is placed in the ADC Data register pair and no new conversion is started. In Free Runing mode, you start the conversion only once, and then, the ADC automatically will start the following conversion as soon as the previous one is finished.
 
-</pre>
+        SPI     Mode    CPOL    CPHA    Sample
+        0   0   0   Leading (Rising) Edge
+        1   0   1   Trailing (Falling) Edge
+        2   1   0   Leading (Falling) Edge
+        3   1   1   Trailing (Rising) Edge
 
 
+        SPR1 and SPR2 (SPI Clock Rate Select) bits: 
 
-ADC registers
+        The frequency of the SPI clock is related to the frequency of the AVR oscillator. 
+        The faster the SPI clock signal is, the faster the data trasfer will be, however, you must respect the maximum clock frequency specified by the Slave 
 
-<pre>
-[ADMUX] [ADCSR] [ADCL/ADCH]
+        SPR1    SPR0    SCK frequency
+        0   0   fosc/4
+        0   1   fosc/16
+        1   0   fosc/64
+        1   1   fosc/128
 
- ADC Multiplexer Select Register (ADMUX)
 
-  This register is used to select which of the 8 channel (between ADC0 to ADC7) will be the input to the ADC. Since there are 8 possible inputs, only the 3 least   significant bits of this register are used. The following table describe the setting of ADMUX.
+        </pre>
 
- ADC Control and Status Register (ADCSR)
+        <h2>UART</h2>
 
- ADC Data Register Low (ADCL)
+        SEE ALSO [[Serial_com]]
 
- ADC Data Register High (ADCH). 
+        <pre>
+        Data Register Empty UDRE
+        Transmit Complete TXC0
+        Receive Complete RXC0
 
-</pre>
+        UBRR - Clock generator registers (16 bit , LOW and HIGH 8 bit REGISTERS )
 
+        UBRRH - high
+        UBRRL - low
 
+        Transmitter registers
+        UDR
 
-Read analog input and adjust a blinking LED
+        Receiver registers
+        UCSRA UCSRB UCSRC
 
-<pre>
+        MORE INFO - 
 
-//http://www.marcelpost.com/wiki/index.php/ATtiny85_ADC
+        ############
+        BITS IN UCSRA:
 
- #include <avr/io.h>
- #include <util/delay.h>
+        RXC - bit is set when the USART has completed receiving a byte from the host (may be your PC) and the program should read it from UDR
+        TXC - bit is set (1) when the USART has completed transmitting a byte to the host and your program can write new data to USART via UDR
 
-void initADC()
-{
-  // this function initialises the ADC 
 
-  // prescaler set to 128 for mcu running at 8MHz
+        #HALF/DOUBLE THE SPEED
+        UCSRA |= (1 << U2X);
 
-  ADMUX =
-            (1 << ADLAR) |     // left shift result
-            (0 << REFS1) |     // Sets ref. voltage to VCC, bit 1
-            (0 << REFS0) |     // Sets ref. voltage to VCC, bit 0
-            (0 << MUX3)  |     // use ADC2 for input (PB4), MUX bit 3
-            (0 << MUX2)  |     // use ADC2 for input (PB4), MUX bit 2
-            (1 << MUX1)  |     // use ADC2 for input (PB4), MUX bit 1
-            (0 << MUX0);       // use ADC2 for input (PB4), MUX bit 0
+        ############
+        BITS IN UCSRB:
 
-  ADCSRA = 
-            (1 << ADEN)  |     // Enable ADC 
-            (1 << ADPS2) |     // set prescaler to 64, bit 2 
-            (1 << ADPS1) |     // set prescaler to 64, bit 1 
-            (1 << ADPS0);      // set prescaler to 64, bit 0  
-}
+        RXCIE: Receive Complete Interrupt Enable - When this bit is written one the the associated interrupt is enabled.
 
+        TXCIE: Transmit Complete Interrupt Enable - When this bit is written one the the associated interrupt is enabled.
 
-int main( void ) 
-{
-  DDRB = 0x02;
+        RXEN: Receiver Enable - When you write this bit to 1 the USART receiver is enabled. The normal port functionality of RX pin will be overridden. So you see that the associated I/O pin now switch to its secondary function,i.e. RX for USART.
 
-  initADC();
+        TXEN: Transmitter Enable
 
-  while(1)
-  {
+        UCSZ2: USART Character Size
 
-    ADCSRA |= (1 << ADSC);         // start ADC measurement
-    while (ADCSRA & (1 << ADSC) ); // wait till conversion complete 
-  /*
-    if (ADCH > 128)  // ADC input voltage is more than half of VCC
-    PORTB = 0x02;    // ADC input voltage is less than half of VCC
-    }
-  */
+        ############
+        BITS IN UCSRC:
 
-	 PORTB = 0x02;
-	 _delay_ms(ADCH/10 ); 
-	 PORTB = 0x00;
-	 _delay_ms(ADCH/10 ); 
 
-  }
+        #############
+        UCSZ: USART Character size - These three bits (one in the UCSRB) selects the number of bits of data that is transmited in each frame. Normally the unit of data in MCU is 8BIT (C type "char") and this is most widely used so we will go for this. Otherwise you can select 5,6,7,8 or 9 bit frames!
 
-  return 0;
-}
-</pre>
+        #############
+        UBRR: USART Baud Rate Register:
 
+        This is the USART Baud rate register, it is 16BIT wide so UBRRH is the High Byte and UBRRL is Low byte. But as we are using C language it is directly available as UBRR and compiler manages the 16BIT access. This register is used by the USART to generate the data transmission at specified speed (say 9600Bps). 
 
-==Interrupts==
 
+        baud rate=(system clock frequency)/(2(UBRR + 1)),
 
+        UBRR=((system clock generator)/(16 × baud rate))- 1
 
-Steps
-<pre>
+        </pre>
 
-Ensure the interrupt system has been globally enabled. 
-Ensure the specific interrupt subsystem has been locally enabled.
-Ensure the registers associated with the specific interrupt have been configured correctly.
 
-</pre>
+        easy serial console in linux 
+        <pre>
 
+        screen /dev/ttyUSB0 115200
 
-<pre>
-Tasks are organized into a function called an interrupt service routine (ISR)
-Each interrupt will have its own ISR- Ensure the ISR for a specific interrupt is tied to the correct interrupt vector address
-Interrupts can cause nasty bugs , for example in the middle of reading a 16 bit value from two 8 bit registers
-you may need to disable and reenable in code at key times
-</pre>
+        //    to exit screen: Ctrl-a k
 
+        </pre>
 
-<pre>
-#include <avr/interrupt.h>
 
-CLI();      Disable interrupts
-SEI();      Global Interrupt Enable 
-SLEEP();    sleep, waiting for interrupt 
-ISR(Vector) Interrupt Service Routine - Vector is a condition to trigger   
 
 
-</pre>
 
+        EXAMPLE 2313 UART TRANSMIT
+        <pre>
+        /*
+         ATTINY2313 
+         HFUSE=D4
+         LFUSE=E4
+         EFUSE=FF
+         */
 
-EXTERNAL INTERRUPT ON A 2313
+        #define F_CPU 16000000
+        #define BAUD 9600
 
-<pre>
-//FROM http://www.windmeadow.com/node/19
+        #include <avr/io.h>
+        #include <util/delay.h>
+        #include <util/setbaud.h>
 
-#include <avr/interrupt.h>
+        void inituart(void)
+        {
+           UBRRH = UBRRH_VALUE;
+           UBRRL = UBRRL_VALUE;
 
-int main (void)
-{
+           //found this , seems relavant 
+           UCSRA |= (1 << U2X);
 
-  // Set Pin 6 (PD2) as the pin to use for this example
-  PCMSK |= (1<<PIND2);
 
-  // interrupt on INT0 pin falling edge (sensor triggered) 
-  MCUCR = (1<<ISC01) | (1<<ISC00);
+           UCSRB = (1 << RXEN)  | (1 << TXEN);      // Enable UART receiver and transmitter
+           UCSRC = (1 << UCSZ1) | (1 << UCSZ0);   // set to 8 data bits, 1 stop bit
+        }
 
-  // turn on interrupts!
-  GIMSK  |= (1<<INT0);
 
- while (1) { }
-}
+        void transmitbyte (unsigned char data)
+        {   
+           while (!(UCSRA & (1 << UDRE)));   // Wait for empty transmit buffer
+           UDR = data;                  // Start transmittion
+        }
 
-SIGNAL (SIG_INT0)
-{ 
-    // Do some stuff
 
-}
-</pre>
+        int main(void) {
+           DDRB |= 1<<PB0;   /* set PB0 to output */
+           inituart();
+            while(1) {
+                transmitbyte('a');
+                transmitbyte('b');
+                transmitbyte('c');
+                transmitbyte('d');
 
+              _delay_ms(10);
+              PORTB ^= 1<<PB0;
+            }
+            return 0;
+        } 
+        </pre>
 
+        <h2>Read data on a port</h2>
 
-ARRAY OF BYTES 
 
-<pre>
-#include <avr/io.h>
-#include <util/delay.h>
+        EXAMPLE PROGRAMS WITH INPUT/OUTPUT 
 
 
-/*
+        read from one port and write to another 
+        <pre>
+        #include <avr/io.h>
+        #include <util/delay.h>
 
- HBRIDGE BOT
- USES L293D/sn75441ONE CHIP
- 
- CONTROLLED WITH PORTB (0-4)
- ENABLE LINE - pin 4
- MOTOR CTRL 0-4 (NEVER TURN 0,1 or 2-3 ON AT SAME TIME )
 
-  portb 0x01 = 2A
-  portb 0x02 = 1A
-  portb 0x04 = 3A
-  portb 0x08 = 4A
-  portb 0x10 = enable 1,2
+        int main (void)
+        {
+          // set PORTB for output
+          DDRB = 0xFF;
+          //set PORTA as input
+          DDRA = 0x00;
 
-*/
+          PORTA = 0X00;
+          
+          int del = 100;
+         
+          //to make lower nibble of port a as output, higher nibble as input with pull-ups enabled
+          //DDRB  = 0x0F;        //lower nib> output, higher nib> input
+          //PORTB = 0xF0;        //lower nib> set output pins to 0, 
 
-int main (void)
-{
-   DDRB |= 0b00011111; // Set LED as output
-   int a = 0;
-   uint8_t       bytes[4]; 
-   uint16_t      delay =300; 
+                             
+          while (1)
+            {
+            
+              PORTB = 0x00;
+              if(PINA==0x01)      
+              {
+                    PORTB=0X01;   
+              }
+              if(PINA==0x00)      
+              {
+                    PORTB=0X00;   
+              }  
+               _delay_ms(del);
+               
+               
+               //clear 
+               PORTB = 0x00;
+               PORTB =0Xff;
+                _delay_ms(del);
+          
+              
+            }
 
-   bytes[0] = 0x01;
-   bytes[1] = 0x02;
-   bytes[2] = 0x04;
-   bytes[3] = 0x08;
+          return 1;
+        }
+        </pre>
 
 
-   while (1)
-   {
 
-      for (a=0;a<4;a++){
-       PORTB = bytes[a];
-       PORTB |= 0b00010000;
+        <h2>Digital Analog Converter</h2>
 
-       _delay_ms(delay);
-       PORTB = 0x00;
-       _delay_ms(delay);
+        analog to digital conversion
 
-      }
+        <pre>
+         10bit data is split it into 2 8 bit registers ADCH and ADCL.  
 
+         when you read the ADCL register ,  the ADCH causes to ADC to update.  
 
-   }
-} 
-</pre>
+        two fundamental operation modes: Single Conversion and Free Running. 
+        In Single Conversion mode, you have to initiate each conversion. When it is done, the result is placed in the ADC Data register pair and no new conversion is started. In Free Runing mode, you start the conversion only once, and then, the ADC automatically will start the following conversion as soon as the previous one is finished.
 
+        </pre>
 
 
 
-==SPI RX==
-<pre>
-#include <avr/io.h>
-#include <util/delay.h>
+        ADC registers
 
-#define F_CPU 16000000UL
+        <pre>
+        [ADMUX] [ADCSR] [ADCL/ADCH]
 
-/*
+         ADC Multiplexer Select Register (ADMUX)
 
-  this program enables SPI communication and
-  Sets the AVR into Slave mode
+          This register is used to select which of the 8 channel (between ADC0 to ADC7) will be the input to the ADC. Since there are 8 possible inputs, only the 3 least   significant bits of this register are used. The following table describe the setting of ADMUX.
 
-*/
+         ADC Control and Status Register (ADCSR)
 
+         ADC Data Register Low (ADCL)
 
-#include <avr/io.h>
+         ADC Data Register High (ADCH). 
 
+        </pre>
 
-int main (void)
-{
-    char data;
 
-   
-    DDRD |= (0xc); //2 output LEDS PD4&5
 
-    DDRB &= ~((1<<2)|(1<<3)|(1<<5));   // SCK, MOSI and SS as inputs
-    DDRB |= (1<<4);                    // MISO as output
+        Read analog input and adjust a blinking LED
 
-    SPCR &= ~(1<<MSTR);                // Set as slave 
-    //SPCR |= (1<<SPR0)|(1<<SPR1);       // divide clock by 128
-    SPCR |= (1<<SPE);                  // Enable SPI
+        <pre>
 
+        //http://www.marcelpost.com/wiki/index.php/ATtiny85_ADC
 
-    while(1)
-    {
-        while(!(SPSR & (1<<SPIF)));    // wait until all data is received
-        //data = SPDR;                   // hurray, we now have our data
-        PORTD = SPDR; //SHOW DATA ON PORTD (KEITH WAS HERE)
-    }
-}
+         #include <avr/io.h>
+         #include <util/delay.h>
 
-</pre>
+        void initADC()
+        {
+          // this function initialises the ADC 
 
+          // prescaler set to 128 for mcu running at 8MHz
 
+          ADMUX =
+                    (1 << ADLAR) |     // left shift result
+                    (0 << REFS1) |     // Sets ref. voltage to VCC, bit 1
+                    (0 << REFS0) |     // Sets ref. voltage to VCC, bit 0
+                    (0 << MUX3)  |     // use ADC2 for input (PB4), MUX bit 3
+                    (0 << MUX2)  |     // use ADC2 for input (PB4), MUX bit 2
+                    (1 << MUX1)  |     // use ADC2 for input (PB4), MUX bit 1
+                    (0 << MUX0);       // use ADC2 for input (PB4), MUX bit 0
 
-==SPI TX==
-<pre>
-#include <avr/io.h>
+          ADCSRA = 
+                    (1 << ADEN)  |     // Enable ADC 
+                    (1 << ADPS2) |     // set prescaler to 64, bit 2 
+                    (1 << ADPS1) |     // set prescaler to 64, bit 1 
+                    (1 << ADPS0);      // set prescaler to 64, bit 0  
+        }
 
 
-#define F_CPU 16000000UL
-#define FOSC 16000000UL
+        int main( void ) 
+        {
+          DDRB = 0x02;
 
-#include <util/delay.h>
+          initADC();
 
-/*
+          while(1)
+          {
 
- this program enables SPI communication and
- Sets the AVR into Master mode
+            ADCSRA |= (1 << ADSC);         // start ADC measurement
+            while (ADCSRA & (1 << ADSC) ); // wait till conversion complete 
+          /*
+            if (ADCH > 128)  // ADC input voltage is more than half of VCC
+            PORTB = 0x02;    // ADC input voltage is less than half of VCC
+            }
+          */
 
-*/
+             PORTB = 0x02;
+             _delay_ms(ADCH/10 ); 
+             PORTB = 0x00;
+             _delay_ms(ADCH/10 ); 
 
-int main (void)
-{
-    char data  = 0x04;//0b00001000;
-    char data2 = 0x08;//0b00001100;
+          }
 
-    DDRB |= (1<<2)|(1<<3)|(1<<5);    // SCK, MOSI and SS as outputs
-    DDRB &= ~(1<<4);                 // MISO as input
+          return 0;
+        }
+        </pre>
 
-    SPCR |= (1<<MSTR);               // Set as Master
-    //SPCR |= (1<<SPR0)|(1<<SPR1);     // divided clock by 128
-    SPCR |= (1<<SPE);                // Enable SPI
-    
-    while(1)
-    {
-        SPDR = data;                 // send the data
-        while(!(SPSR & (1<<SPIF)));  // wait until transmission is complete
-        _delay_ms(1000);
 
-        SPDR = data2;                 // send the data
-        while(!(SPSR & (1<<SPIF)));  // wait until transmission is complete
-        _delay_ms(1000);
+        <h2>Interrupts</h2>
 
-        // if you have multiple slaves, this is where you want to switch
-    }
-}
 
-</pre>
 
+        Steps
+        <pre>
 
+        Ensure the interrupt system has been globally enabled. 
+        Ensure the specific interrupt subsystem has been locally enabled.
+        Ensure the registers associated with the specific interrupt have been configured correctly.
 
-==I2C/TWI==
-<pre>
-</pre>
+        </pre>
 
-==C Libraries==
-<pre>
-</pre>
 
+        <pre>
+        Tasks are organized into a function called an interrupt service routine (ISR)
+        Each interrupt will have its own ISR- Ensure the ISR for a specific interrupt is tied to the correct interrupt vector address
+        Interrupts can cause nasty bugs , for example in the middle of reading a 16 bit value from two 8 bit registers
+        you may need to disable and reenable in code at key times
+        </pre>
 
-read NES controller with arduino/mega328p
-<pre>
-#include <avr/io.h>
 
-#define F_CPU 16000000UL //AVR Clock Speed in MHZ
-#define FOSC 16000000    // Clock Speed
-#define BAUD 9600
-#define MYUBRR FOSC/16/BAUD-1
+        <pre>
+        #include <avr/interrupt.h>
 
-#include <util/delay.h>
+        CLI();      Disable interrupts
+        SEI();      Global Interrupt Enable 
+        SLEEP();    sleep, waiting for interrupt 
+        ISR(Vector) Interrupt Service Routine - Vector is a condition to trigger   
 
-#define latch_pin 0x1 //Arduino D8  - NES Orange wire
-#define clock_pin 0x2 //Arduino D9  - NES Red wire
-#define data_pin 0x4  //Arduino D10 - NES Yellow
 
-// #define sbi(a, b) (a) |= (1 << (b))
-// #define cbi(a, b) (a) &= ~(1 << (b)) 
+        </pre>
 
-void USART_Init( unsigned int ubrr)
-{
 
-  UBRR0H = (unsigned char)(ubrr>>8);
-  UBRR0L = (unsigned char)ubrr;
-  /*Enable receiver and transmitter */
-  UCSR0B = (1<<RXEN0)|(1<<TXEN0);
-  /* Set frame format: 8data, 2stop bit */
-  UCSR0C = (1<<USBS0)|(3<<UCSZ00);
-}
+        EXTERNAL INTERRUPT ON A 2313
 
-void USART_Transmit( unsigned char data )
-{
-  /* Wait for empty transmit buffer */
-  while ( !( UCSR0A & (1<<UDRE0)) )
-  ;
-  /* Put data into buffer, sends the data */
-  UDR0 = data;
-}
+        <pre>
+        //FROM http://www.windmeadow.com/node/19
 
-void USART_tx_string( char *data )
-{
-while ((*data != '\0'))
-   {
-      while (!(UCSR0A & (1 <<UDRE0)));
-      UDR0 = *data;
-      data++;
-   }   
-}
+        #include <avr/interrupt.h>
 
+        int main (void)
+        {
 
-void print_bit( uint8_t data){
-    if ( data == 1 ){  
-        USART_Transmit( 0x31 );
-    }else{
-        USART_Transmit( 0x30 );
-    }
-    USART_Transmit( 0xa ); //0xa = new line  
-    USART_Transmit( 0xd ); //0xd = carriage return
-}
+          // Set Pin 6 (PD2) as the pin to use for this example
+          PCMSK |= (1<<PIND2);
 
-void print_byte( uint8_t data){
-   uint8_t ii = 0;
+          // interrupt on INT0 pin falling edge (sensor triggered) 
+          MCUCR = (1<<ISC01) | (1<<ISC00);
 
-   for (ii=0; ii<=7; ii++) {
+          // turn on interrupts!
+          GIMSK  |= (1<<INT0);
 
-       //if ( !!(data & (1 << ii)) ){  // LSB
-       if ( !!(data & (1 << (7 - ii))) ){  // MSB
-           USART_Transmit( 0x31 );
-       }else{
-           USART_Transmit( 0x30 );
-       }
-    }
-    USART_Transmit( 0xa ); //0xa = new line  
-    USART_Transmit( 0xd ); //0xd = carriage return
-}
+         while (1) { }
+        }
 
- 
-void controllerRead(void) {
-  uint8_t controller_data = 0;
-  uint8_t i = 0;
-  
-  PORTB &= ~latch_pin; 
-  PORTB &= ~clock_pin; 
-  PORTB |= latch_pin;  
-  _delay_us(2);
-  PORTB &= ~latch_pin; 
-  controller_data = !!(PINB & data_pin);
+        SIGNAL (SIG_INT0)
+        { 
+            // Do some stuff
 
-  for (i=1; i<=7; i++) {
-     PORTB |= clock_pin;
-     _delay_us(2);
-     controller_data = controller_data << 1;
-     controller_data = controller_data + !!(PINB & data_pin); 
-     _delay_us(4);
-     PORTB &= ~clock_pin;
-  }
+        }
+        </pre>
 
-  print_byte( controller_data);
 
-}
 
+        ARRAY OF BYTES 
 
-int main(){
-  DDRB = 0xFB; 
-  USART_Init(MYUBRR);
-  PORTB |= clock_pin;
-  PORTB |= latch_pin;
-  while (1)
-  {
-    controllerRead();
-  }
- return 1;
-}
+        <pre>
+        #include <avr/io.h>
+        #include <util/delay.h>
 
-</pre>
 
+        /*
 
+         HBRIDGE BOT
+         USES L293D/sn75441ONE CHIP
+         
+         CONTROLLED WITH PORTB (0-4)
+         ENABLE LINE - pin 4
+         MOTOR CTRL 0-4 (NEVER TURN 0,1 or 2-3 ON AT SAME TIME )
 
-==addendum - install avrdude==
+          portb 0x01 = 2A
+          portb 0x02 = 1A
+          portb 0x04 = 3A
+          portb 0x08 = 4A
+          portb 0x10 = enable 1,2
 
-<pre>
- #giving up and doing  it the easy way:
- sudo apt-get install gcc-avr binutils-avr gdb-avr avr-libc avrdude
-</pre>
+        */
 
-<pre>
- #tried to compile on new ubuntu - no luck 
- sudo apt-get install flex byacc bison gcc libusb-1.0.0 libusb-1.0.0-dev
- sudo wget http://ftp.gnu.org/gnu/binutils/binutils-2.24.tar.gz
- tar -xf binutils-2.24.tar.gz
- cd "
- ./configure --target=avr --program-prefix="avr-"
- make
- sudo make install
- #####################
- sudo wget http://download.savannah.gnu.org/releases/avrdude/avrdude-6.1.tar.gz
- #####################
- #if you need to find# /usr/include/libusb-1.0/  
- #####################
-</pre>
+        int main (void)
+        {
+           DDRB |= 0b00011111; // Set LED as output
+           int a = 0;
+           uint8_t       bytes[4]; 
+           uint16_t      delay =300; 
 
+           bytes[0] = 0x01;
+           bytes[1] = 0x02;
+           bytes[2] = 0x04;
+           bytes[3] = 0x08;
 
-==links==
-SEE ALSO [[Serial_com]]
 
-[[Avr-assembler]]
+           while (1)
+           {
 
+              for (a=0;a<4;a++){
+               PORTB = bytes[a];
+               PORTB |= 0b00010000;
 
+               _delay_ms(delay);
+               PORTB = 0x00;
+               _delay_ms(delay);
 
-[[#toc|Contents]]
+              }
+
+
+           }
+        } 
+        </pre>
+
+
+
+
+        <h2>SPI RX</h2>
+        <pre>
+        #include <avr/io.h>
+        #include <util/delay.h>
+
+        #define F_CPU 16000000UL
+
+        /*
+
+          this program enables SPI communication and
+          Sets the AVR into Slave mode
+
+        */
+
+
+        #include <avr/io.h>
+
+
+        int main (void)
+        {
+            char data;
+
+           
+            DDRD |= (0xc); //2 output LEDS PD4&5
+
+            DDRB &= ~((1<<2)|(1<<3)|(1<<5));   // SCK, MOSI and SS as inputs
+            DDRB |= (1<<4);                    // MISO as output
+
+            SPCR &= ~(1<<MSTR);                // Set as slave 
+            //SPCR |= (1<<SPR0)|(1<<SPR1);       // divide clock by 128
+            SPCR |= (1<<SPE);                  // Enable SPI
+
+
+            while(1)
+            {
+                while(!(SPSR & (1<<SPIF)));    // wait until all data is received
+                //data = SPDR;                   // hurray, we now have our data
+                PORTD = SPDR; //SHOW DATA ON PORTD (KEITH WAS HERE)
+            }
+        }
+
+        </pre>
+
+
+
+        <h2>SPI TX</h2>
+        <pre>
+        #include <avr/io.h>
+
+
+        #define F_CPU 16000000UL
+        #define FOSC 16000000UL
+
+        #include <util/delay.h>
+
+        /*
+
+         this program enables SPI communication and
+         Sets the AVR into Master mode
+
+        */
+
+        int main (void)
+        {
+            char data  = 0x04;//0b00001000;
+            char data2 = 0x08;//0b00001100;
+
+            DDRB |= (1<<2)|(1<<3)|(1<<5);    // SCK, MOSI and SS as outputs
+            DDRB &= ~(1<<4);                 // MISO as input
+
+            SPCR |= (1<<MSTR);               // Set as Master
+            //SPCR |= (1<<SPR0)|(1<<SPR1);     // divided clock by 128
+            SPCR |= (1<<SPE);                // Enable SPI
+            
+            while(1)
+            {
+                SPDR = data;                 // send the data
+                while(!(SPSR & (1<<SPIF)));  // wait until transmission is complete
+                _delay_ms(1000);
+
+                SPDR = data2;                 // send the data
+                while(!(SPSR & (1<<SPIF)));  // wait until transmission is complete
+                _delay_ms(1000);
+
+                // if you have multiple slaves, this is where you want to switch
+            }
+        }
+
+        </pre>
+
+
+
+        <h2>I2C/TWI</h2>
+        <pre>
+        </pre>
+
+        <h2>C Libraries</h2>
+        <pre>
+        </pre>
+
+
+        read NES controller with arduino/mega328p
+        <pre>
+            <code class="c"> 
+                #include <avr/io.h>
+
+                #define F_CPU 16000000UL //AVR Clock Speed in MHZ
+                #define FOSC 16000000    // Clock Speed
+                #define BAUD 9600
+                #define MYUBRR FOSC/16/BAUD-1
+
+                #include <util/delay.h>
+
+                #define latch_pin 0x1 //Arduino D8  - NES Orange wire
+                #define clock_pin 0x2 //Arduino D9  - NES Red wire
+                #define data_pin 0x4  //Arduino D10 - NES Yellow
+
+                // #define sbi(a, b) (a) |= (1 << (b))
+                // #define cbi(a, b) (a) &= ~(1 << (b)) 
+
+                void USART_Init( unsigned int ubrr)
+                {
+
+                  UBRR0H = (unsigned char)(ubrr>>8);
+                  UBRR0L = (unsigned char)ubrr;
+                  /*Enable receiver and transmitter */
+                  UCSR0B = (1<<RXEN0)|(1<<TXEN0);
+                  /* Set frame format: 8data, 2stop bit */
+                  UCSR0C = (1<<USBS0)|(3<<UCSZ00);
+                }
+
+                void USART_Transmit( unsigned char data )
+                {
+                  /* Wait for empty transmit buffer */
+                  while ( !( UCSR0A & (1<<UDRE0)) )
+                  ;
+                  /* Put data into buffer, sends the data */
+                  UDR0 = data;
+                }
+
+                void USART_tx_string( char *data )
+                {
+                while ((*data != '\0'))
+                   {
+                      while (!(UCSR0A & (1 <<UDRE0)));
+                      UDR0 = *data;
+                      data++;
+                   }   
+                }
+
+
+                void print_bit( uint8_t data){
+                    if ( data == 1 ){  
+                        USART_Transmit( 0x31 );
+                    }else{
+                        USART_Transmit( 0x30 );
+                    }
+                    USART_Transmit( 0xa ); //0xa = new line  
+                    USART_Transmit( 0xd ); //0xd = carriage return
+                }
+
+                void print_byte( uint8_t data){
+                   uint8_t ii = 0;
+
+                   for (ii=0; ii<=7; ii++) {
+
+                       //if ( !!(data & (1 << ii)) ){  // LSB
+                       if ( !!(data & (1 << (7 - ii))) ){  // MSB
+                           USART_Transmit( 0x31 );
+                       }else{
+                           USART_Transmit( 0x30 );
+                       }
+                    }
+                    USART_Transmit( 0xa ); //0xa = new line  
+                    USART_Transmit( 0xd ); //0xd = carriage return
+                }
+
+                 
+                void controllerRead(void) {
+                  uint8_t controller_data = 0;
+                  uint8_t i = 0;
+                  
+                  PORTB &= ~latch_pin; 
+                  PORTB &= ~clock_pin; 
+                  PORTB |= latch_pin;  
+                  _delay_us(2);
+                  PORTB &= ~latch_pin; 
+                  controller_data = !!(PINB & data_pin);
+
+                  for (i=1; i<=7; i++) {
+                     PORTB |= clock_pin;
+                     _delay_us(2);
+                     controller_data = controller_data << 1;
+                     controller_data = controller_data + !!(PINB & data_pin); 
+                     _delay_us(4);
+                     PORTB &= ~clock_pin;
+                  }
+
+                  print_byte( controller_data);
+
+                }
+
+
+                int main(){
+                  DDRB = 0xFB; 
+                  USART_Init(MYUBRR);
+                  PORTB |= clock_pin;
+                  PORTB |= latch_pin;
+                  while (1)
+                  {
+                    controllerRead();
+                  }
+                 return 1;
+                }
+
+            </code>
+        </pre>
+
+
+
+        <h2>addendum - install avrdude</h2>
+
+        <pre>
+             #giving up and doing  it the easy way:
+             sudo apt-get install gcc-avr binutils-avr gdb-avr avr-libc avrdude
+        </pre>
+
+        <pre>
+            #tried to compile on new ubuntu - no luck 
+            sudo apt-get install flex byacc bison gcc libusb-1.0.0 libusb-1.0.0-dev
+            sudo wget http://ftp.gnu.org/gnu/binutils/binutils-2.24.tar.gz
+            tar -xf binutils-2.24.tar.gz
+            cd "
+            ./configure --target=avr --program-prefix="avr-"
+            make
+            sudo make install
+            #####################
+            sudo wget http://download.savannah.gnu.org/releases/avrdude/avrdude-6.1.tar.gz
+            #####################
+            #if you need to find# /usr/include/libusb-1.0/  
+            #####################
+        </pre>
+    </body>
+</html>
+
+

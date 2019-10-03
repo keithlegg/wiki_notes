@@ -6,2039 +6,2053 @@
         <meta charset="utf-8"/>
     </head>
 
+   <body style="background-color:#cccccc;">
 
-    <link rel="stylesheet" href="styles/default.css">
-    <script charset="UTF-8" src="highlight.pack.js"></script>
+        <link rel="stylesheet" href="styles/default.css">
+        <script charset="UTF-8" src="highlight.pack.js"></script>
+        <script>hljs.initHighlightingOnLoad();</script>
 
-
-    <h2>My adventures learning STM32 ARM Cortex M3 and M4 chips.</h2>
-
-    <pre>
-    
-    
-    </pre>
+        <h2>My adventures learning STM32 ARM Cortex M3 and M4 chips.</h2>
 
 
 
-    <b> History</b>
+        <b> History</b>
 
-    <pre>
-    
-
-    </pre>
-
-
-    <pre>
-        I have used AVR chips for years and I love them, but they are becoming a little outdated. The biggest deficiency with them is the lack of a real debugger, only 8 bit, upper limit on clock speed of 20Mhz, and so on.
-
-        Back in 2015 I decided it was time to learn ARM. I met a guy who was a wizard with STM32 and upon seeing how unbelievably CHEAP these chips are knew I had to go in that direction. The problem was I insisted it would be on linux and GCC tools. It has been a hell of a ride and a very hair pulling, frustrating ride at that. The ARM ecosystem is frighteningly huge. AVR is dead simple compared to ARM. 3 years later I am still learning to do much beyond SPI and serial ports. (I did take a detour and learn verilog, FPGA, and other things. This is all in my spare time )  
-
-        The first breakthrough I had was with the STM32L100C and STM32L152C discovery boards with openOCD and libopencm3 for my firmware library. I got nucleo to work with Mbed, but I want GCC and my familiar command line. Mbed feels weird to me. I don’t like the idea of writing my code in a web browser, no matter how friendly it is designed to be, It is too abstracted from what is actually happening "in the metal"
-
-        The first thing that actually got me working was here:
-
-        https://gctechspace.org/2014/09/getting-to-blinky-with-the-stm32-and-ubuntu-linux/
-
-        That information with the SMT32 Discovery board actually worked. 
-
-    </pre>
-
-
-
-    <pre>
-        <b>Terminology</b>
-
-        There are a few things you should know before you begin: 
-
-        There are many many tools and libraries to choose from. You need to know what each does.
-
-
-        The key components are <b>compiler/toolchain</b>, <b>Debugger</b>, <b>Firmware/peripheral library</b>, and of course hardware.
-
-        I am also including the method of getting your code to the board in hardware. The basic methods I have tested are:
-
-        SWD/ST-Link, JTAG with Black magic probe, Mbed
-
-        There are other ones I have not tsted like Segger Jlink, DFU bootloader, etc. 
-
-        I have successfully tested the STM32 Discovery boards, 1Bitsy, And the "Blue pill" models.  
-    </pre>
-
-
-
-    <h2>General ARM notes</h2>
-
-    <pre>
-        libopencm3        - open-source firmware library for various ARM Cortex-M microcontrollers 
-        openocd           - method of debugging (On Chip Debugger) - can be used instead of GDB. GDB seems to be superior, but both seem to work 
-        SWD               - serial wire debug - another standard protocol VS JTAG , used by several families of ARM chips 
-        ST-link           - STM32 family debugger and programmer (SWD protocol). The Disco/Nucleo boards have this built in 
-        texane            - some really smart French guy who wrote an open source version of st-link/st-util/st-flash (works as SWD) 
-        Black Magic Probe - open source GDB/JTAG interface. You can flash this firmware to a Disco board (STM32 chip based) 
-    </pre>
-
-    <div>
-        Some terminology
         <pre>
-            semihosting   - the ability to use the JTAG debug interface as a sink for printf messages. 
-            AMBA          - Advanced Microcontroller Bus Architecture is an open-standard, 
-                            on-chip interconnect specification for the connection and management of functional blocks in system-on-a-chip
-            APB           - Advanced Peripheral Bus ( v2.0)
+        
 
-            load/store    - architecture divides instructions into 2 categories: memory access 
-                            (load and store between memory and registers), and ALU operations
-            FSMC          - flexible static memory controller
-            FMC           - flexible memory controller
-            CMSIS         - defined by ARM and not manufacturer of chip 
-            RCC           - reset and clock control 
-            Sys Tick      - master clock ,STM32 has it, Nordic does not(?) 
-            semihosting   - is using JTAG to emulate a serial port - (echo printf), halts the CPU to send (?) 
-                            you have to link proper libraries in makefile and call initialise_monitor_handles() in code before using printf()
         </pre>
-    </div>
 
 
-
-    <b>Memory Map</b>
-
-
-    <pre>
-    The memory of the STM32 processors consists of two major areas – 
-    flash memory (effectively read-only) begins at address 0x08000000  
-    static ram   (read/write) memory begins at address 0x20000000. 
-    (The size of these areas is processor specific.)
-    </pre>
-
-    <pre>
-    The most important of these are the address of the reset
-    handler (stored at 0x08000004) which is executed whenever the processor is
-    reset, and the initial stack pointer value (stored at 0x08000000).
-    </pre>
-
-
-    4 Gb total 
-    <pre>
-      .--------
-
-      .--------
-
-      .--------
-
-      .--------
-
-      .--------
-
-    </pre>
-
-
-    <b>Semihosting</b>
-
-
-    Allows you to send printf text over GDB 
-    <pre>
-    LDFLAGS += --specs=rdimon.specs -lc -lrdimon
-    </pre>
-
-    <pre>
-    extern void initialise_monitor_handles(void);
-
-    int main(void) {
-        initialise_monitor_handles();
-
-        printf("hello world!\n");
-        // do things
-    }
-    </pre>
-
-    possibly??
-    <pre>
-    monitor semihosting enable
-    </pre>
-
-
-    <b>Clock notes</b>
-
-    <pre>
-    has clock enables for sections of the chip, so before you go in and try to blink an led
-    you need to find the enable bit for that gpio block and see if it comes out of reset enabled, if not then enable it
-    </pre>
-
-
-   <b>Compiler</b> 
-
-    All methods have one thing in common, You need a compiler and it needs to be GCC. 
-
-    The basic setup is something like this: (newer) 
-    <pre>
-    sudo add-apt-repository ppa:team-gcc-arm-embedded/ppa
-    sudo apt-get update 
-    sudo apt-get install gcc-arm-embedded 
-    </pre>
-
-    Or this: (older)
-    <pre>
-    sudo add-apt-repository ppa:terry.guo/gcc-arm-embedded
-    sudo apt-get update
-    sudo apt-get install gcc-arm-none-eabi
-    </pre>
-
-
-    <b>misc GCC Notes</b>
-
-    Convert elf to bin
-    <pre>
-        arm-none-eabi-objcopy -O binary firmware.elf firmware.bin
-    </pre>
-
-    To look at assembly (Godspeed, young idiot)
-    "compile but do not link/ save temp files used"
-    <pre>
-    -c -save-temps
-    </pre>
-
-
-    if you want math lib
-    <pre>
-    LDLIBS += -lm 
-    </pre>
-
-    <b>Peripheral/firmware libraries</b>
-
-    These are code that assists you in getting up and running quicker. ARM chips use a memory mapped command structure and the low level commands are very cryptic. 
-
-    Which is easier? 
-    <pre>
-    #define PERIPH_BASE     0x40000000
-    #define GPIOA_BASE      (PERIPH_BASE + 0x10800)
-    #define GPIOA_CRL       (*(volatile unsigned long*)(GPIOA_BASE + 0x00))
-    #define GPIOA_CRH       (*(volatile unsigned long*)(GPIOA_BASE + 0x04))
-    #define GPIOA_BSRR      (*(volatile unsigned long*)(GPIOA_BASE + 0x10))
-    #define GPIOA_BRR       (*(volatile unsigned long*)(GPIOA_BASE + 0x14))
-
-    GPIOA_BSRR = 1<<LED_PIN;  // set LED pin high
-    </pre>
-
-    OR?
-
-    <pre>
-        GPIO_SetBits(GPIOA, LED_PIN);
-    </pre>
-
-
-    <b>Example Two - firmware lib VS pure register manipulation</b>
-
-    Using the STM32 firmware library  
-    <pre>
-      #define perif  (u32) (0x40010000)
-      #define geepioa_base (perif + 0x0800)
-      #define geepioa ((GPIO_TypeDef *) geepioa_base)
-
-      while (1)
-      {
-          GPIO_SetBits(geepioa, ((uint16_t)8) );
-          //Delay(0x100001);
-          GPIO_ResetBits(geepioa,  ((uint16_t)8) );
-      }
-    </pre>
-
-    Basically assembly at this point. Runs three times faster, but this is no way to work
-    <pre>
-      #define perif  (u32) (0x40010000)
-      #define geepioa_base (perif + 0x0800)
-      #define geepioa ((GPIO_TypeDef *) geepioa_base)
-      geepioa->BSRR = ((uint16_t)8);      
-      geepioa->BRR = ((uint16_t)8);       
-    </pre>
-
-
-    <b>libopencm3</b>
-
-
-    Firmware code examples
-    <pre>
-    git clone https://github.com/libopencm3/libopencm3-examples.git
-    cd libopencm3-examples
-    git submodule init
-    git submodule update
-    make
-    </pre>
-
-    <b>GCC+libopencm3 toolchain</b>
-    - Assuming all goes well, you can now compile code for ARM chips.- 
-
-
-    You may now program your board without a debugger by:
-    <pre>
-    make flash
-    </pre>
-
-    API
-    <pre>
-    http://libopencm3.github.io/docs/latest/html/
-    </pre>
-
-    <pre>
-    git clone git://github.com/libopencm3/libopencm3.git
-    make
-    </pre>
-
-    libopencm3 terminology
-    <pre>
-    GPIO_PUPD_NONE - pullup
-     
-    </pre>
-
-    <pre>
-    $ git clone --recursive 'https://github.com/libopencm3/libopencm3-examples'
-    $ cd libopencm3-examples
-    $ make
-    $ cd examples/stm32
-    $ cd f1
-    $ cd stm32-h103/miniblink
-    </pre>
-
-
-    <b> Pin initialization </b>
-
-    Configure & Use Port Pins as inputs
-
-    I got tricked into thinking this was optional 
-
-    (because the registers stay set as long as chip is powered up)
-
-    <pre>
-    // set Port A bit 15 as input with pull-up
-    void setPA15_IPU ( void ) {
-          GPIO_InitTypeDef GPIO_InitStructure;
-          GPIO_InitStructure.GPIO_Pin = GPIO_Pin_15; // bit to be set
-          GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IPU; // Input with pull-up resistor
-          GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;
-          GPIO_Init(GPIOA, &GPIO_InitStructure);
-    } 
-    You can set multiple bits in one go, e.g.
-          GPIO_InitStructure.GPIO_Pin = GPIO_Pin_15 | GPIO_Pin_14; // bits to be set
-
-    Or all bits using
-          GPIO_InitStructure.GPIO_Pin = GPIO_Pin_All; // all 16-bits set to ...
-    </pre>
-
-    
-    <b>STM32 Standard Peripheral Lib</b>
-
-    Best place to start if you want to learn from the ground up. 
-
-    <pre>
-    </pre>
-
-    <b>Debuggers/Programmer Hardware </b>
-
-    
-    <b>Programming hardware</b>
-
-    The line gets a little blurry between hardware and software with debuggers. To make things more confusing, you can reflash firmware from one device to another. An ST-Link can be flashed to become a J-Link. A Discovery board can be flashed to become a Black Magic Probe (with an onboard ST-Link!!)
-
-    ??? GDB can run on your machine, or be implemented in firmware, like on the Black Magic probe. GDB communicates with TCP/Serial ???
-
-    <b>ST-Link</b>
-
-    <pre>
-    De facto standard for programming STM32, but for some damn reason they dont support Linux so people had to reverse engineer it to make it work
-    Hence, there are a host of buggy, flaky tools out there that work, sort of work, or dont work at all.
-    All the Discovery boards have a ST-Link built in. 
-    China sells clones for 2 bucks on Ebay, but the debugging is broken on them with linux. 
-    Your mileage may vary.
-    </pre>
-
-
-    <b>J-Link</b>
-
-
-    <pre>
-          J-link JTAG Pinout            J-link SWD Pinout       
-             ___________                   ___________ 
-    VTref    | 1   2   | NC       VTref    | 1   2   | NC  
-    nRST     | 3   4   | GND      NC       | 3   4   | GND     
-    TDI      | 5   6   | GND      NC       | 5   6   | GND     
-    TMS    __| 7   8   | GND      SWDIO  __| 7   8   | GND    
-    TCK    |   9   10  | GND      SWCLK  |   9   10  | GND   
-    RTCK   |   11  12  | GND      NC     |   11  12  | GND      
-    TDO    --| 13  14  | GND*     SWO    --| 13  14  | GND*    
-    RESET    | 15  16  | GND*     RESET    | 15  16  | GND*     
-    DBGRQ    | 17  18  | GND*     NC       | 17  18  | GND*     
-    5V-sply  | 19  20  | GND*     5V-sply  | 19  20  | GND*       
-             -----------                   -----------  
-    </pre>
-
-    <pre>
-
-    SWDIO- Single bi-directional data pin. A pull-up 
-           resistor is required. ARM recom-mends 100 kOhms.
-
-    </pre>
-
-    <div>
-        Nucleo to Jlink
         <pre>
-         Nucleo CN4         J-Link
-         Pin 1 Any Vdd Pin  <-->  Pin 1  (VTref)
-         Pin 2 (TCK)        <-->  Pin 9  (SWCLK / TCK)
-         Pin 3 (GND)        <-->  Pin 4  (GND)
-         Pin 4 (TMS)        <-->  Pin 7  (SWDIO / TMS)
-         Pin 5 (NRST)       <-->  Pin 15 (nRST)
-         Pin 6 (SWO)        <-->  Pin 13 (SWO / TDO)
-        </pre>
-    </div>
+            I have used AVR chips for years and I love them, but they are becoming a little outdated. The biggest deficiency with them is the lack of a real debugger, only 8 bit, upper limit on clock speed of 20Mhz, and so on.
 
-    <div>
-        Install drivers (unplug JLink first)
+            Back in 2015 I decided it was time to learn ARM. I met a guy who was a wizard with STM32 and upon seeing how unbelievably CHEAP these chips are knew I had to go in that direction. The problem was I insisted it would be on linux and GCC tools. It has been a hell of a ride and a very hair pulling, frustrating ride at that. The ARM ecosystem is frighteningly huge. AVR is dead simple compared to ARM. 3 years later I am still learning to do much beyond SPI and serial ports. (I did take a detour and learn verilog, FPGA, and other things. This is all in my spare time )  
+
+            The first breakthrough I had was with the STM32L100C and STM32L152C discovery boards with openOCD and libopencm3 for my firmware library. I got nucleo to work with Mbed, but I want GCC and my familiar command line. Mbed feels weird to me. I don’t like the idea of writing my code in a web browser, no matter how friendly it is designed to be, It is too abstracted from what is actually happening "in the metal"
+
+            The first thing that actually got me working was here:
+
+            https://gctechspace.org/2014/09/getting-to-blinky-with-the-stm32-and-ubuntu-linux/
+
+            That information with the SMT32 Discovery board actually worked. 
+
+        </pre>
+
+
+
         <pre>
-          sudo dpkg -i ~/Downloads/jlink_5.2.7_x86_64.deb
-        </pre>
-    </div>
+            <b>Terminology</b>
 
-    <div>
-        Start server
+            There are a few things you should know before you begin: 
+
+            There are many many tools and libraries to choose from. You need to know what each does.
+
+
+            The key components are <b>compiler/toolchain</b>, <b>Debugger</b>, <b>Firmware/peripheral library</b>, and of course hardware.
+
+            I am also including the method of getting your code to the board in hardware. The basic methods I have tested are:
+
+            SWD/ST-Link, JTAG with Black magic probe, Mbed
+
+            There are other ones I have not tsted like Segger Jlink, DFU bootloader, etc. 
+
+            I have successfully tested the STM32 Discovery boards, 1Bitsy, And the "Blue pill" models.  
+        </pre>
+
+
+
+        <h2>General ARM notes</h2>
+
         <pre>
-          /usr/bin/JLinkGDBServer
+            libopencm3        - open-source firmware library for various ARM Cortex-M microcontrollers 
+            openocd           - method of debugging (On Chip Debugger) - can be used instead of GDB. GDB seems to be superior, but both seem to work 
+            SWD               - serial wire debug - another standard protocol VS JTAG , used by several families of ARM chips 
+            ST-link           - STM32 family debugger and programmer (SWD protocol). The Disco/Nucleo boards have this built in 
+            texane            - some really smart French guy who wrote an open source version of st-link/st-util/st-flash (works as SWD) 
+            Black Magic Probe - open source GDB/JTAG interface. You can flash this firmware to a Disco board (STM32 chip based) 
         </pre>
-    </div>
 
-    <pre>
-        JLinkExe
-        JLinkGDBServer
-        JLinkLicenseManager 
-        JLinkRegistration   
-        JLinkRemoteServer   
-        JLinkRTTClient      
-        JLinkRTTLogger      
-        JLinkSTM32          
-        JLinkSWOViewer
-    </pre>
+        <div>
+            Some terminology
+            <pre>
+                semihosting   - the ability to use the JTAG debug interface as a sink for printf messages. 
+                AMBA          - Advanced Microcontroller Bus Architecture is an open-standard, 
+                                on-chip interconnect specification for the connection and management of functional blocks in system-on-a-chip
+                APB           - Advanced Peripheral Bus ( v2.0)
 
+                load/store    - architecture divides instructions into 2 categories: memory access 
+                                (load and store between memory and registers), and ALU operations
+                FSMC          - flexible static memory controller
+                FMC           - flexible memory controller
+                CMSIS         - defined by ARM and not manufacturer of chip 
+                RCC           - reset and clock control 
+                Sys Tick      - master clock ,STM32 has it, Nordic does not(?) 
+                semihosting   - is using JTAG to emulate a serial port - (echo printf), halts the CPU to send (?) 
+                                you have to link proper libraries in makefile and call initialise_monitor_handles() in code before using printf()
+            </pre>
+        </div>
 
-    JLinkExe Flags
-    <pre>
-        -device <DeviceName>            Selects the target device.
-        -if <TargetInterface>           Configures the target interface.
-        -speed <InterfaceSpeed>     Configures the target interface speed.
-        -jtagconf <IRPre,DRPre>     Configures the JTAG scan configuration of the target device.
-                                        IRPre==-1 and DRPre==-1 can be passed to use auto-detection (First known device will be used).
-        -autoconnect <Value>            Value==1: Forces the J-Link Commander to connect to the target, automatically.
-        -CommanderScript <ScriptPath>   Selects a J-Link Commander Command file which contains the commands for the batch mode.
-        -SelectEmuBySN <SerialNo>   Selects a specific J-Link (via its serial number) to connect to. Used in case multiple J-Links 
-                                        are connected to the same PC via USB
 
 
+        <b>Memory Map</b>
 
-        JLinkExe -device stm32f103r8
 
-        JLinkExe -device stm32f303vc
-    
-    </pre>
-    
+        <pre>
+        The memory of the STM32 processors consists of two major areas – 
+        flash memory (effectively read-only) begins at address 0x08000000  
+        static ram   (read/write) memory begins at address 0x20000000. 
+        (The size of these areas is processor specific.)
+        </pre>
 
-    <h2><b>Black Magic Probe</b></h2>
+        <pre>
+        The most important of these are the address of the reset
+        handler (stored at 0x08000004) which is executed whenever the processor is
+        reset, and the initial stack pointer value (stored at 0x08000000).
+        </pre>
 
-    <pre>
-           BMP Pinout (breakout board)
-             ------
-        VCC  |    | GND 
-         -   |    | GND 
-        TDI  |    | GND  
-        TMS  |    | GND 
-        TCK |-    | GND 
-         -  |_    | GND 
-        TDO  |    | GND 
-        RST  |    | GND 
-         -   |    | GND 
-         -   |    | GND
-                  ---- 
 
-    </pre>
+        4 Gb total 
+        <pre>
+          .--------
 
-    <pre>
-    Created by some genius in New Zealand. Sold in America by One bit squared in Eugene, Or
-    Seems to work well, but not all chips are supported?? 
-    </pre>
+          .--------
 
-    
+          .--------
 
-    <h2>Debuggers</h2>
+          .--------
 
-    The debugger is optional, but really one the best part of the ARM toolchain. 
+          .--------
 
-    I have used three, openOCD, ST-link/SWD, and JTAG with the black magic probe. 
-    I am told BMP is the best way to go, but I have also been told JTAG is outdated and uses too many pins. 
-    Black magic probe costs 75 dollars, and you can get a Chinese ST-link clone for 3 bucks on ebay. 
-    I tend to gravitate toward the cheapest tools since I am just a hobbyist and not rich.
+        </pre>
 
 
-    <b>SWD/texane/ST-Link</b>b>
+        <b>Semihosting</b>
 
-    <b>install texane's st-link </b>
 
-    (from memory - hazy)
-    <pre>
-    sudo apt-get install build-essential
-    sudo apt-get install libusb-ish
+        Allows you to send printf text over GDB 
+        <pre>
+        LDFLAGS += --specs=rdimon.specs -lc -lrdimon
+        </pre>
 
-    git clone https://github.com/texane/stlink.git
+        <pre>
+        extern void initialise_monitor_handles(void);
 
-    make debug
-    make release
+        int main(void) {
+            initialise_monitor_handles();
 
-    cd /build/XXX
+            printf("hello world!\n");
+            // do things
+        }
+        </pre>
 
-    sudo make install
-    sudo ldconfig
+        possibly??
+        <pre>
+        monitor semihosting enable
+        </pre>
 
-    </pre>
 
+        <b>Clock notes</b>
 
+        <pre>
+        has clock enables for sections of the chip, so before you go in and try to blink an led
+        you need to find the enable bit for that gpio block and see if it comes out of reset enabled, if not then enable it
+        </pre>
 
-    To load your code 
-    <pre>
-        st-flash write firmware.bin 0x8000000
-    </pre>
 
-    To use GDB (repeated below) 
+       <b>Compiler</b> 
 
-    run a debugger with st-util 
-    <pre>
-    st-util -l
-    </pre>
+        All methods have one thing in common, You need a compiler and it needs to be GCC. 
 
-    alternative method -plug in board and look in dev
-    <pre>
-    st-util 4242 /dev/stlinkv2_5
-    </pre>
+        The basic setup is something like this: (newer) 
+        <pre>
+        sudo add-apt-repository ppa:team-gcc-arm-embedded/ppa
+        sudo apt-get update 
+        sudo apt-get install gcc-arm-embedded 
+        </pre>
 
-    When connected: run this in another terminal 
-    <pre>
-    arm-none-eabi-gdb BlinkingLights.elf
-    (gdb) target extended-remote :4242
-    (gdb) load
-    (gdb) continue
-    </pre>
-
-    mass erase a chip
-    <pre>
-    st-flash erase
-    </pre>
+        Or this: (older)
+        <pre>
+        sudo add-apt-repository ppa:terry.guo/gcc-arm-embedded
+        sudo apt-get update
+        sudo apt-get install gcc-arm-none-eabi
+        </pre>
+
 
-
-    <h2>OpenOCD</h2> 
-
-    (from the link above) the first method I used to get up and running with an STM discovery board.
-
-    <pre>
-    #install your debugger and programmer – there are a few alternatives
-    sudo apt-get install openocd
-
-    #you’re not quite done, you need to give your regular user access to the USB port. So add a udev rule using
-    sudo nano /etc/udev/rules.d/99-stlink.rules
-
-    #and add the following line:
-    ATTRS{idVendor}=="0483", ATTRS{idProduct}=="3748", MODE="0666"
-
-    #You can then do
-    sudo udevadm control --reload-rules
-
-    #To reload the rules. Plug in your dev board and run lsusb to check that the you can see a line that looks similar to your udev rule. You can run:
-    openocd -f /usr/share/openocd/scripts/board/stm32f3discovery.cfg
-
-    </pre>
-
-    With libopencm3
-    <pre>
-    cd libopencm3-examples/examples/stm32/f3/stm32f3-discovery/miniblink
-    openocd -f /usr/share/openocd/scripts/board/stm32f3discovery.cfg
-    #-------
-    telnet 127.0.0.1 4444
-    reset halt 
-    flash write_image erase miniblink.elf
-    reset   #runs the damn thing 
-    </pre>
-
-    <pre>
-        openocd -d0 -f board/yourboard.cfg -c "init;targets;halt;flash write_image erase firmware.hex;shutdown"
-    </pre>
-
-    <h2><b>GDB</b></h2>
-
-    The king of debuggers and really the best out there. I first used it with the black magic probe, but it is used with SWD and others as well. 
-    There are whole books just on GDB, but you can learn the basics in a day. Life changing stuff!!
-
-    <b>GDB environment</b>
-
-    I think I ran this to get GDB- but not certain - test to see if it exists first
-    you need to be aware of where your tool comes from
-    <pre>
-
-    Read this:
-    http://gnuarmeclipse.github.io/toolchain/install/
-
-    I think it is a bad idea to trust ubuntu to find the "right" version with apt:
-        sudo apt-get install gdb-arm-none-eabi
-    </pre>
-
-    <b>gdbinit</b>
-
-    When you run the GDB an initialization file, called .gbdinit, is searched in the GDB home directory. If the GDB finds a 
-    .gdbinit file, GDB executes all the commands in that file. 
-
-    <b>BlackMagicProbe and gdbinit</b>
+        <b>misc GCC Notes</b>
 
-    Just add the following lines to the file ~/.gdbinit
-    <pre>
-    set target-async on
-    set confirm off
-    set history save
-    set mem inaccessible-by-default off
-    tar ext /dev/cu.usbmodemSOMESERIAL1
-    mon version
-    mon swdp_scan
-    #mon jtag_scan
-    att 1
-    </pre>
-
-    <b> using GDB </b>
-
-    Basic idea 
-    <pre>
-    cd examples/stm32/f1/stm32vl-discovery/miniblink
-    arm-none-eabi-gdb miniblink.elf
-    load
-    run
-    </pre>
-
-    Remember, your code is a location in memory, including all your libraries.
-    <pre>
-    (gdb) info line
-    Line 175 of "main.c" starts at address 0x80002f6 <main+6> and ends at 0x80002fa <main+10>.
-    </pre>
-
-    If you get lost try something like this
-    <pre>
-    (gdb) line main
-    </pre>
-
-
-    Some gdb configs and what thy do 
-    <pre>
-    set target-async on:                 Enable background execution commands.
-    set confirm off:                     This disables the really annoying “are you sure” questions. 🙂
-    set history save:                    This forces GDB to save the command history.
-    set mem inaccessible-by-default off: This is one of the most important commands here. 
-                                         If you don’t set this option the debugger will prevent you from doing so  
-                                         as it has no idea that this memory is actually accessible. 
-    tar ext /dev/cu.usbmodemSOMESERIAL1: tell gdb to connect to Black Magic Probe
-    mon version:                         Print version of the Black Magic Probe.
-    mon swdp_scan:                       Scan for devices using SWD protocol.
-    att 1:                               Attach to the first process. On a microcontroller you will have only one process…
+        Convert elf to bin
+        <pre>
+            arm-none-eabi-objcopy -O binary firmware.elf firmware.bin
+        </pre>
+
+        To look at assembly (Godspeed, young idiot)
+        "compile but do not link/ save temp files used"
+        <pre>
+        -c -save-temps
+        </pre>
+
+
+        if you want math lib
+        <pre>
+        LDLIBS += -lm 
+        </pre>
+
+        <b>Peripheral/firmware libraries</b>
 
-    </pre>
+        These are code that assists you in getting up and running quicker. ARM chips use a memory mapped command structure and the low level commands are very cryptic. 
 
-    GDB commands that you might find useful when playing around with code:
+        Which is easier? 
+        <pre>
+        #define PERIPH_BASE     0x40000000
+        #define GPIOA_BASE      (PERIPH_BASE + 0x10800)
+        #define GPIOA_CRL       (*(volatile unsigned long*)(GPIOA_BASE + 0x00))
+        #define GPIOA_CRH       (*(volatile unsigned long*)(GPIOA_BASE + 0x04))
+        #define GPIOA_BSRR      (*(volatile unsigned long*)(GPIOA_BASE + 0x10))
+        #define GPIOA_BRR       (*(volatile unsigned long*)(GPIOA_BASE + 0x14))
+
+        GPIOA_BSRR = 1<<LED_PIN;  // set LED pin high
+        </pre>
+
+        OR?
+
+        <pre>
+            GPIO_SetBits(GPIOA, LED_PIN);
+        </pre>
+
+
+        <b>Example Two - firmware lib VS pure register manipulation</b>
+
+        Using the STM32 firmware library  
+        <pre>
+          #define perif  (u32) (0x40010000)
+          #define geepioa_base (perif + 0x0800)
+          #define geepioa ((GPIO_TypeDef *) geepioa_base)
 
-    <pre>
-    load -> load the binary from the provided elf file. 
-          (Note: it detects if the elf file changed on the hard disk and loads a new one if available.
-           So you don’t have to quit GDB every time when you recompile your code)
-    run  -> start the execution of your firmware
-    backtrace -> print the call stack trace of the current line of code being executed
-    make -> runs make command in the directory you started gdb. Very useful if you want to update the binary you are running really quick.
-    break filename:lineno -> you can add a breakpoint inside your code. 
-          GDB will stop the execution of the program as soon as the line is hit by the firmware.
-    step -> execute one single line of code and return back to the command line
-    next -> same as step but it does not enter into the functions called and skips them. 
-         Useful if you want to step over functions you know take forever and you are not interested in what they are actually doing. 
-    print variablename -> print the content of a variable
-    print/x variablename -> print the content of a variable as HEX
-    list -> prints the context of the line being executed at the very moment
-    kill -> if used in a GDB script it will reset the MCU and exit GDB. Very useful as last command of a GDB script.
-    </pre>
+          while (1)
+          {
+              GPIO_SetBits(geepioa, ((uint16_t)8) );
+              //Delay(0x100001);
+              GPIO_ResetBits(geepioa,  ((uint16_t)8) );
+          }
+        </pre>
 
+        Basically assembly at this point. Runs three times faster, but this is no way to work
+        <pre>
+          #define perif  (u32) (0x40010000)
+          #define geepioa_base (perif + 0x0800)
+          #define geepioa ((GPIO_TypeDef *) geepioa_base)
+          geepioa->BSRR = ((uint16_t)8);      
+          geepioa->BRR = ((uint16_t)8);       
+        </pre>
 
-    Detaching from the target device
-    <pre>
-    detach
-    kill
-    </pre>
 
+        <b>libopencm3</b>
 
-    <b>breakpoints</b>
 
+        Firmware code examples
+        <pre>
+        git clone https://github.com/libopencm3/libopencm3-examples.git
+        cd libopencm3-examples
+        git submodule init
+        git submodule update
+        make
+        </pre>
 
-    <pre>
-    All program to be debugged in gdb must be compiled by gcc with the option "-g" ????
-    </pre>
+        <b>GCC+libopencm3 toolchain</b>
+        - Assuming all goes well, you can now compile code for ARM chips.- 
 
-    <pre>
-    ARM does not define a specific breakpoint instruction. 
 
-    __asm__("BKPT");
+        You may now program your board without a debugger by:
+        <pre>
+        make flash
+        </pre>
 
-    __builtin_trap() intrinsic 
-    raise(SIGTRAP).
-    </pre>
+        API
+        <pre>
+        http://libopencm3.github.io/docs/latest/html/
+        </pre>
 
+        <pre>
+        git clone git://github.com/libopencm3/libopencm3.git
+        make
+        </pre>
 
+        libopencm3 terminology
+        <pre>
+        GPIO_PUPD_NONE - pullup
+         
+        </pre>
+
+        <pre>
+        $ git clone --recursive 'https://github.com/libopencm3/libopencm3-examples'
+        $ cd libopencm3-examples
+        $ make
+        $ cd examples/stm32
+        $ cd f1
+        $ cd stm32-h103/miniblink
+        </pre>
+
+
+        <b> Pin initialization </b>
+
+        Configure & Use Port Pins as inputs
+
+        I got tricked into thinking this was optional 
+
+        (because the registers stay set as long as chip is powered up)
+
+        <pre>
+        // set Port A bit 15 as input with pull-up
+        void setPA15_IPU ( void ) {
+              GPIO_InitTypeDef GPIO_InitStructure;
+              GPIO_InitStructure.GPIO_Pin = GPIO_Pin_15; // bit to be set
+              GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IPU; // Input with pull-up resistor
+              GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;
+              GPIO_Init(GPIOA, &GPIO_InitStructure);
+        } 
+        You can set multiple bits in one go, e.g.
+              GPIO_InitStructure.GPIO_Pin = GPIO_Pin_15 | GPIO_Pin_14; // bits to be set
+
+        Or all bits using
+              GPIO_InitStructure.GPIO_Pin = GPIO_Pin_All; // all 16-bits set to ...
+        </pre>
+
+        
+        <b>STM32 Standard Peripheral Lib</b>
+
+        Best place to start if you want to learn from the ground up. 
+
+        <pre>
+        </pre>
+
+        <b>Debuggers/Programmer Hardware </b>
+
+        
+        <b>Programming hardware</b>
+
+        The line gets a little blurry between hardware and software with debuggers. To make things more confusing, you can reflash firmware from one device to another. An ST-Link can be flashed to become a J-Link. A Discovery board can be flashed to become a Black Magic Probe (with an onboard ST-Link!!)
+
+        ??? GDB can run on your machine, or be implemented in firmware, like on the Black Magic probe. GDB communicates with TCP/Serial ???
+
+        <b>ST-Link</b>
+
+        <pre>
+        De facto standard for programming STM32, but for some damn reason they dont support Linux so people had to reverse engineer it to make it work
+        Hence, there are a host of buggy, flaky tools out there that work, sort of work, or dont work at all.
+        All the Discovery boards have a ST-Link built in. 
+        China sells clones for 2 bucks on Ebay, but the debugging is broken on them with linux. 
+        Your mileage may vary.
+        </pre>
+
+
+        <b>J-Link</b>
+
+
+        <pre>
+              J-link JTAG Pinout            J-link SWD Pinout       
+                 ___________                   ___________ 
+        VTref    | 1   2   | NC       VTref    | 1   2   | NC  
+        nRST     | 3   4   | GND      NC       | 3   4   | GND     
+        TDI      | 5   6   | GND      NC       | 5   6   | GND     
+        TMS    __| 7   8   | GND      SWDIO  __| 7   8   | GND    
+        TCK    |   9   10  | GND      SWCLK  |   9   10  | GND   
+        RTCK   |   11  12  | GND      NC     |   11  12  | GND      
+        TDO    --| 13  14  | GND*     SWO    --| 13  14  | GND*    
+        RESET    | 15  16  | GND*     RESET    | 15  16  | GND*     
+        DBGRQ    | 17  18  | GND*     NC       | 17  18  | GND*     
+        5V-sply  | 19  20  | GND*     5V-sply  | 19  20  | GND*       
+                 -----------                   -----------  
+        </pre>
+
+        <pre>
+
+        SWDIO- Single bi-directional data pin. A pull-up 
+               resistor is required. ARM recom-mends 100 kOhms.
+
+        </pre>
+
+        <div>
+            Nucleo to Jlink
+            <pre>
+             Nucleo CN4         J-Link
+             Pin 1 Any Vdd Pin  <-->  Pin 1  (VTref)
+             Pin 2 (TCK)        <-->  Pin 9  (SWCLK / TCK)
+             Pin 3 (GND)        <-->  Pin 4  (GND)
+             Pin 4 (TMS)        <-->  Pin 7  (SWDIO / TMS)
+             Pin 5 (NRST)       <-->  Pin 15 (nRST)
+             Pin 6 (SWO)        <-->  Pin 13 (SWO / TDO)
+            </pre>
+        </div>
+
+        <div>
+            Install drivers (unplug JLink first)
+            <pre>
+              sudo dpkg -i ~/Downloads/jlink_5.2.7_x86_64.deb
+            </pre>
+        </div>
 
-    <b>GDB in STLINK </b>
+        <div>
+            Start server
+            <pre>
+              /usr/bin/JLinkGDBServer
+            </pre>
+        </div>
 
-    run a debugger with st-util 
-    <pre>
-    st-util -l
-    </pre>
+        <pre>
+            JLinkExe
+            JLinkGDBServer
+            JLinkLicenseManager 
+            JLinkRegistration   
+            JLinkRemoteServer   
+            JLinkRTTClient      
+            JLinkRTTLogger      
+            JLinkSTM32          
+            JLinkSWOViewer
+        </pre>
 
-    alternative method -plug in board and look in dev
-    <pre>
-    st-util 4242 /dev/stlinkv2_5
-    </pre>
 
-    When connected: run this 
-    <pre>
-    arm-none-eabi-gdb BlinkingLights.elf
-    (gdb) target extended-remote :4242
-    (gdb) load
-    (gdb) continue
-    </pre>
+        JLinkExe Flags
+        <pre>
+            -device <DeviceName>            Selects the target device.
+            -if <TargetInterface>           Configures the target interface.
+            -speed <InterfaceSpeed>     Configures the target interface speed.
+            -jtagconf <IRPre,DRPre>     Configures the JTAG scan configuration of the target device.
+                                            IRPre==-1 and DRPre==-1 can be passed to use auto-detection (First known device will be used).
+            -autoconnect <Value>            Value==1: Forces the J-Link Commander to connect to the target, automatically.
+            -CommanderScript <ScriptPath>   Selects a J-Link Commander Command file which contains the commands for the batch mode.
+            -SelectEmuBySN <SerialNo>   Selects a specific J-Link (via its serial number) to connect to. Used in case multiple J-Links 
+                                            are connected to the same PC via USB
 
-    <b> GDB with Black Magic Probe (BMP) </b>
 
-    flash your firmware with GDB/Black magic probe
 
-    <pre>
-    cd examples/1bitsy/pwmledfade
-    arm-none-eabi-gdb pwmledfade.elf
-    target extended-remote /dev/ttyACM0
-    monitor version
-    monitor jtag_scan
-    attach 1
-    load
-    run
-
-    #the next thing is a button combination
-    Ctrl-C
-    Ctrl-D
-    </pre>
-
-
-    <b> JTAG notes </b>
-
-    Bus description
-    <pre>
-    TCK: [Test Clock] has noting to do with the board or system clock. The Test Clock is used to load the test mode data from the TMS pin, and the test data on the TDI pin [on the rising edge]. On the falling edge test clock outputs the test data on the TDO pin. As with any clock pin this line needs to be terminated in order to reduce reflections. The termination should be a 68 ohm resistor in series with a 100pF capacitor to ground. The TCK signal is bused to all Integrated Circuits [IC] in the JTAG chain. The signal may require buffering or be fanned out by multiple drivers depending on the distance and number of devices in the chain. Using multiple drivers would also require a termination resistor on each TCK line.
+            JLinkExe -device stm32f103r8
 
-    TMS: [Test Mode Select Input] controls the operation of the test logic, by receiving the incoming data]. The value at the input on the rising edge of the clock controls the movement through the states of the TAP controller. The TMS line has an internal pull-up, so the input is high with no input. The TMS signal is bused to all ICs in the JTAG chain. The TMS line should have a 10k pull-up resistor on the line.
+            JLinkExe -device stm32f303vc
+        
+        </pre>
+        
 
-    TDI: [Test Data Input] receives serial input data which is either feed to the test data registers or instruction register, but depends on the state of the TAP controller. The TDI line has an internal pull-up, so the input is high with no input. The TDI signal is feed to the TDI pin of the first IC in the JTAG chain. The TDO signal from that IC is then sent to the TDI pin of the next IC in the chain or sent back out to the JTAG header. The TDI line should have a 10k pull-up resistor on the line.
+        <h2><b>Black Magic Probe</b></h2>
 
-    TDO: [Test Data Output] outputs serial data which comes from either the test data registers or instruction register, but depends on the state of the TAP controller. Data applies to the TDI pin will appear at the TDO pin but may be shifted of a number of clock cycles, depending on the length of the internal register. The TDO pin is high-Impedance. The TDO signal is the output from a JTAG device that feed the TDI input of another JTAG device. The TDO line should have a 10k pull-up resistor on the line. The TDO signal should also include a 22 ohm series resistor placed near the last device in the JTAG chain.
+        <pre>
+               BMP Pinout (breakout board)
+                 ------
+            VCC  |    | GND 
+             -   |    | GND 
+            TDI  |    | GND  
+            TMS  |    | GND 
+            TCK |-    | GND 
+             -  |_    | GND 
+            TDO  |    | GND 
+            RST  |    | GND 
+             -   |    | GND 
+             -   |    | GND
+                      ---- 
 
-    TRST: [Test Rest] will asynchronously reset the JTAG test logic. The logic is reset (with TRST) regardless of the state of TMS or TCLK. The TRST signal is bused to all ICs in the JTAG chain. The TRST signal should include a pull-down resistor when possible to reduce the chance the signal floats
-    </pre>
-
-    <b>STM32 ARM notes </b>
+        </pre>
 
-    <b>sys tick</b>
+        <pre>
+        Created by some genius in New Zealand. Sold in America by One bit squared in Eugene, Or
+        Seems to work well, but not all chips are supported?? 
+        </pre>
 
-    Does not work right.... WHY?
-    <pre>
-    #include <libopencm3/cm3/systick.h>
-    static volatile uint32_t system_millis;
-    void sys_tick_handler(void){system_millis++;}
-    void msleep(uint32_t delay)
-    {
-        uint32_t wake = system_millis + delay;
-        while (wake > system_millis);
-    }
-    </pre>
-
-
-    <b> GPIO/ Configuration Registers </b>
-
-    // http://hertaville.com/stm32f0-gpio-tutorial-part-1.html
-
-    <pre>
-
-        GPIO port mode register (GPIOx_MODER)
-        GPIO port output type register (GPIOx_OTYPER)
-        GPIO port output speed register (GPIOx_OSPEEDR)
-        GPIO port pull-up/pull-down register (GPIOx_PUPDR)
-        GPIO port input data register (GPIOx _IDR)
-        GPIO port outp ut data register (GPIOx_ODR)
-        GPIO port bit set/reset register (GPIOx _BSRR)
-        GPIO port configuration lock register (GPIOx_LCKR)
-        GPIO alternate function low register (GPI Ox_AFRL)
-        GPIO alternate function high register (GPIOx_AFRH)
-        GPIO Port bit reset register (GPIOx_BRR)
-
-    </pre>
-
-
-    <pre>
-        The IO pins are arranged as five ports each 
-        having 16 IO lines. 
-    </pre>
-
-    <pre>
-        The STM32 has four configuration registers for each of the ports.
-
-            Port mode register – GPIOx_MODER
-            Output type register – GPIOx_OTYPER
-            Speed register – GPIOx_OSPEEDR
-            Pull-up/Pull-down register – GPIOx_PUPDR
-
-        Each GPIO port has two 32-bit wide configuration 
-        registers; these two registers combine to give a 64-bit 
-        wide configuration register. 
-
-    </pre>
-
-    <pre>
-        This 32 bit register holds 2 bit values which defines the operation mode. The modes are:
-        00 - Input
-        01 - General purpose output
-        10 - Alternate function
-        11 - Analog
-    </pre>
+        
 
-    <b>Wiring notes for various STM32 devices </b>
-
-    <b> JTAG HEADER </b>
+        <h2>Debuggers</h2>
 
-    20 Pin JTAG     
-    <pre>
-        Function        Pin     Function
-        1   TRST        2   GND
-        3   TDO         4   GND
-        5   TDI         6   GND
-        7   TMS         8   GND
-        9   TCK         10  GND
-        11  VPP_E       12  GND
-        13  A/W         14  GND
-        15  User 0      16  GND
-        17  Rdy/Bsy     18  GND
-        19  User 1      20  Vcc
-    </pre>
+        The debugger is optional, but really one the best part of the ARM toolchain. 
 
+        I have used three, openOCD, ST-link/SWD, and JTAG with the black magic probe. 
+        I am told BMP is the best way to go, but I have also been told JTAG is outdated and uses too many pins. 
+        Black magic probe costs 75 dollars, and you can get a Chinese ST-link clone for 3 bucks on ebay. 
+        I tend to gravitate toward the cheapest tools since I am just a hobbyist and not rich.
 
-    <b> NUCLEO SWD </b>
 
-    Nucleo to "Blue pill" 
+        <b>SWD/texane/ST-Link</b>b>
 
-    Unhook the jumpers on board to use with external board
+        <b>install texane's st-link </b>
 
-    works with opencm3 stm32vl-discovery code, even though it is a different board
-    <pre>
-        1 VDD_TARGET/ VC C/ 3V3   - (front header far left)
-        2 SWCLK                   - (front header second from right)
-        3 GND                     - (front header far right)
-        4 SWDIO                   - (front header second from left)
-        5 NRST                    - (7/NRST)  - *SEEMS TO NOT MATTER AT ALL* 
-        6 SWO                     - NC
-    </pre>
-
-
-    <b> JTAG TO STM32 DISCOVERY </b>
-      
-    UNHOOK ALL THREE JUMPERS ON THE BOARD FIRST!
-    <pre>
-        VCC->VDD
-        TMS->PA13 , pin 46
-        TCK->PA14 , pin 49
-        TDO->PB3  , pin 55 
-        RST->NRST , pin 7
-        TDI->PA15 , pin 50
-        GND->GND  , pin 64, etc
-    </pre>
-
-    STM32F100/MB913 (Hmm - notice it is the same)
-    <pre>
-        VCC->3V3
-        TMS->PA13  
-        TCK->PA14  
-        TDO->PB3    
-        RST->RST  
-        TDI->PA15  
-        GND->GND  
-    </pre>
-
-    <b>STM32 hardware notes</b>
-
-    One of the maddening things about STM32, is the sheer number of chips, all with cryptic part numbers that almost sound similar. As if the myriad of development tools wasnt bad enough, its hard to know which  device to begin with. 
-    These are the tools I have tested and had SOME luck with.
-
-    <b> Bootloader info </b>
-
-    Boot0 Pins
-    <pre>
-        when the STM32 is powered up (and reset line is released), an internal bootcode (bootloader) will check if the flash is blank. 
-        If the flash is blank, the bootloader will enable and listen for some peripherals (some UART/I2C/SPI/USB) 
-        to communicate with the external world as a mean to download and flashing the device.
-
-        If the flash is not blank, the user code in the flash will start.
-
-        If boot0 is tied high, the bootloader will assume the flash is blank.
-        Another way to program the flash of the microcontroller is by debugger (ST Link) through SWD or JTAG.
-
-        This does not apply universally to all STM32, only to the newer ones -in the 'L1 this is not implemented.
-
-        For an exhaustively detailed list, see Table 2. Bootloader activation patterns in AN2606.
-
-    </pre>
-
-
-    ===Connect under reset===
-    <pre>
-        For connect under reset to work the programmer must have control over the reset pin
-        If you pull the BOOT0 pin high during power up, the MCU will start into the internal bootloader 
-        and you can gain access using several serial protocols (see the reference manual for more details)
-
-    </pre>
-
-
-    <b> other weird methods </b>
-    <pre>
-        mass-storage - mbed          - ???
-        DFU - Device Firmware Update - WTF?
-        HID - Human Interface Device - ???
-    </pre>
-
-
-    <h2>Chips</h2>
-
-    <b>STM32F1</b>b>
-
-    <b>STM32F100RBT6B </b>- Discovery Value line MB913C
-    <pre>
-        works with Black magic probe, GDB works 
-    </pre>
-
-    <b>STM32F103R8T6 </b>- Nucleo F103RB
-    <pre>
-        works with st-util, st-flash - GDB worked once but I cant get it to work now.... 
-        works with libopencm3 f1/stm32vl-discovery example 
-    </pre>
-
-    <b>STM32F103C8T6</b> (blue pill)
-
-    <pre>
-        wont work with Black magic probe - seems to work great with texane/st-link
-        debugger seems to be borked though
-    </pre>
-
-    <pre>
-    72 MHz
-    Cortex M3
-    64K Flash
-    20 Kbytes of SRAM
-    2 x 12-bit, 1 μs A/D converters
-    3 USARTs
-    Up to 2 SPIs
-    2 x I2C interfaces
-    7-channel DMA controller
-    </pre>
-
-    ===STM32F3===
-    <b>STM32F303VCT6</b> - Discovery with Gyro, Accelerometer, Magnetometer
-    <pre>
-    </pre>
-
-    ===STM32F4===
-    <b>STM32F401RET6</b> - Nucleo F401RE
-    <pre>
-    black magic probe says -> Exception: JTAG-DP invalid ACK
-    no luck with st-link either 
-    openocd talks to board but no blinky ... (not sure which ocm3 code to use)
-    </pre>
-
-    <b>STM32F401VCT6U</b> - Discovery 401C-DISCO
-    <pre>
-    black magic probe acts like it will work but goes dead on load command??
-    </pre>
-
-    <b>STM32F411RET6U</b> -NucleoF411RE
-    <pre>
-    Seems to work okay with Black Magic Probe and libopenCM3 - little glitchty
-    need more testing  
-    </pre>
-
-
-    <b>STM32F429ZIT6U</b> -Discovery with LCD screen and SRAM 
-    <pre>
-    </pre>
-
-
-    <b>STM32F415</b> (1bitsy)
-    <pre>
-    168 MHz
-    Cortex M4
-    Up to 1 Mbyte of Flash 
-    192+4KB RAM
-    two 12-bit DACs, three 12-bit ADCs 
-    6x USARTs running at up to 10.5 Mbit/s 
-    3x SPI running at up to 42 Mbit/s
-    3x I²C 
-    Up to 17 timers
-    </pre>
-
-    ===STM32L1===
-
-    STM32L100RCT6 - STM32L100C-DISCO 
-    <pre>
-    I had good luck with this board 
-    Black magic probe and GDB work fine 
-    St-Link wont work with GDB but programs fine 
-    </pre>
-
-    <pre>
-    24 MHz
-    256KB Flash, 
-    16KB SRAM
-    </pre>
-
-    ==<b>Boards</b>==
-
-    ===STM32 Discovery ===
-
-    <pre>
-    CHEAP boards (10-20 dollars) and they all come with a ST-Link programmer on the board, and usually fun peripherals as well.
-    (Buttons, LCD, Accelerometers, etc)
-    Defacto standard STM32 tools, can be reflashed, repurposed, hacked etc
-    </pre>
-
-    ==="blue pill"===
-    <pre>
-    Oh China, you never cease to amaze with stuff so cheap it feels illegal. In fact, it often is illegal. 
-    But who really cares about international copyright laws anyway? 
-
-    There are 3 versions blue, red and black. I have only tested the blue. It works as advertised. 
-
-    Make sure to pick up an ST-Link clone while you are placing your ebay orders. There is no better bang for the buck than these. 
-
-    On the other hand. GDB behaved strangely for me with this setup (lists wrong address in code, failed to stop at a breakpoint), so maybe running a tool reverse engineered from a proprietary format on hardware that was cloned in China may not be the best approach for learning. BMP seems to be more reliable, but I need to do more testing 
-     
-    The tools seem to work fine for uploading and running code however... 
-    </pre>
-
-    ===1bitsy===
-
-    Made in my home town by a guy I met in person. I am neutral on them, they seem high tech, but frankly a bit expensive compared to other options.
-    Pretty much designed to work with the BMP, so you are looking at 100 dollars to get up and running. 
-    If you get a "Blue Pill" and JLINK clone you can be up and running for under $10, with a less powerful but very capable chip. 
-
-
-    To get info/help 
-    <pre>
-
-    https://github.com/1BitSy
-    https://github.com/1BitSy/1bitsy-hardware
-
-    https://gitter.im/1bitsy/Lobby
-    https://gitter.im/blacksphere/blackmagic
-    https://gitter.im/libopencm3/discuss 
-    </pre>
-
-
-    <b> 1Bitsy Examples from lesson</b>
-
-    <pre>
-    https://github.com/esden/1bitsy-bmpm-exercises/tree/master/class-1
-    </pre>
-
-    From the video transcript 
-    <pre>
-    01 min 10 secs sudo add-apt-repository ppa:team-gcc-arm-embedded/ppa
-    01 min 30 secs sudo apt-get update 
-    01 min 38 secs sudo apt-get install gcc-arm-embedded 
-    01 min 51 secs sudo apt-get install git 
-    02 min 02 secs git clone https://github.com/1bitsy/1bitsy-examples.git 
-    02 min 07 secs cd 1bitsy-examples 
-    02 min 12 secs git submodule init 
-    02 min 15 secs git submodule update 
-    02 min 21 secs make 
-    02 min 28 secs id 
-    02 min 32 secs sudo adduser $USER dialout 
-    02 min 41 secs id 
-    02 min 48 secs <logout> 
-    04 min 54 secs <Plug in Black Magic Probe to microUSB> 
-    05 min 32 secs dmesg | tail 
-    05 min 34 secs <Output includes: "ttyACM0" and "ttyACM1"> 
-    05 min 42 secs <Plug in 1bitsy to microUSB> 
-    05 min 43 secs dmesg | tail 
-    05 min 44 secs <Output includes: "ttyACM2" - but ONLY if there is already firmware on it that makes it appear as a serial device. This is NOT the case for the Kickstart one... > 
-    05 min 45 secs <Connect 1bitsy and Black Magic Probe using the JTAG cable> 
-    05 min 48 secs cd ~/1bitsy-examples/examples/1bitsy/fancyblink 
-    05 min 49 secs arm-none-eabi-gdb fancyblink.elf 
-    05 min 54 secs target extended-remote /dev/ttyACM0 
-    06 min 04 secs monitor version 
-    06 min 11 secs monitor help 
-    06 min 17 secs monitor jtag_scan 
-    06 min 23 secs attach 1 
-    06 min 27 secs load 
-    06 min 30 secs run 
-    06 min 32 secs y 
-    06 min 37 secs <Ctrl + C> 
-    06 min 38 secs list 
-    06 min 43 secs tui enable 
-    06 min 47 secs cont 
-    06 min 51 secs <Ctrl + C> 
-    06 min 52 secs step 
-    06 min 53 secs start 
-    06 min 56 secs y 
-    07 min 00 secs next 
-    07 min 04 secs step 
-    07 min 07 secs next 
-    07 min 07 secs next 
-    07 min 17 secs next 
-    07 min 22 secs cont 
-    07 min 22 secs cont 
-    07 min 25 secs quit 
-    07 min 26 secs y 
-    07 min 26 secs y DFU part: 
-    07 min 44 secs <Press the user button and insert microUSB cable> 
-    07 min 47 secs dmesg | tail 
-    07 min 50 secs lsusb
-    07 min 54 secs <Output includes: "STMicroelectronics STM Device in DFU Mode"> 
-    07 min 57 secs sudo apt-get install dfu-util 
-    08 min 13 secs make fancyblink.bin 08 min 18 secs ls 
-    08 min 23 secs sudo dfu-util -d 0483:df11 -c 1 -a 0 -s 0x08000000:leave -D fancyblink.bin 
-    09 min 07 secs <1bitsy is now programmed!> 
-    </pre>
-
-    == <b> Tested code samples </b>==
-
-    === <b>with libopencm3 </b>===
-    <b>I2C with 1bitsy</b>
-    mostly taken from https://github.com/brabo/stm32f4-i2c-scan, and tested 
-
-    Dont forget to add pull ups on the 2 data bus pins. i2C is open collector. A 10K resistor works for 3.3V
-
-    i2c.c
-    <pre>
-    #include <stdint.h>
-    #include <stdio.h>
-    #include <libopencm3/stm32/i2c.h>
-    #include <libopencm3/stm32/rcc.h>
-    #include <libopencm3/stm32/gpio.h>
-    #include "i2c.h"
-
-
-    static uint8_t i2c_start(uint32_t i2c, uint8_t address, uint8_t mode);
-
-    void i2c_init(void)
-    {
-        rcc_periph_clock_enable(RCC_GPIOA);
-        rcc_periph_clock_enable(RCC_GPIOC);
-        rcc_periph_clock_enable(RCC_I2C3);
-
-        //GPIO A8 is SCL 
-        gpio_mode_setup(GPIOA, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO8);
-        gpio_set_output_options(GPIOA, GPIO_OTYPE_OD, GPIO_OSPEED_50MHZ,
-            GPIO8);
-        gpio_set_af(GPIOA, GPIO_AF4, GPIO8);
-
-        //GPIO C9 SDA 
-        gpio_mode_setup(GPIOC, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO9);
-        gpio_set_output_options(GPIOC, GPIO_OTYPE_OD, GPIO_OSPEED_50MHZ,
-            GPIO9);
-        gpio_set_af(GPIOC, GPIO_AF4, GPIO9);
-
-
-        i2c_peripheral_disable(I2C3); /* disable i2c during setup */
-        i2c_reset(I2C3);
-
-        i2c_set_fast_mode(I2C3);
-        i2c_set_clock_frequency(I2C3, I2C_CR2_FREQ_42MHZ);
-        i2c_set_ccr(I2C3, 35);
-        i2c_set_trise(I2C3, 43);
-        //i2c_set_speed(I2C3, 0);
-
-        i2c_peripheral_enable(I2C3); /* finally enable i2c */
-
-        i2c_set_own_7bit_slave_address(I2C3, 0x00);
-    }
-
-    void i2c_deinit(void)
-    {
-        i2c_send_stop(I2C3);
-
-        i2c_reset(I2C3);
-        i2c_peripheral_disable(I2C3); /* disable i2c during setup */
-
-    }
-
-    static uint8_t i2c_start(uint32_t i2c, uint8_t address, uint8_t mode)
-    {
-        i2c_send_start(i2c);
-
-        /* Wait for master mode selected */
-        while (!((I2C_SR1(i2c) & I2C_SR1_SB)
-            & (I2C_SR2(i2c) & (I2C_SR2_MSL | I2C_SR2_BUSY))));
-
-        i2c_send_7bit_address(i2c, address, mode);
-
-        int timeout = 20000;
-        /* Waiting for address is transferred. */
-        while (!(I2C_SR1(i2c) & I2C_SR1_ADDR)) {
-            if (timeout > 0) {
-                timeout--;
-            } else {
-                return 1;
+        (from memory - hazy)
+        <pre>
+        sudo apt-get install build-essential
+        sudo apt-get install libusb-ish
+
+        git clone https://github.com/texane/stlink.git
+
+        make debug
+        make release
+
+        cd /build/XXX
+
+        sudo make install
+        sudo ldconfig
+
+        </pre>
+
+
+
+        To load your code 
+        <pre>
+            st-flash write firmware.bin 0x8000000
+        </pre>
+
+        To use GDB (repeated below) 
+
+        run a debugger with st-util 
+        <pre>
+        st-util -l
+        </pre>
+
+        alternative method -plug in board and look in dev
+        <pre>
+        st-util 4242 /dev/stlinkv2_5
+        </pre>
+
+        When connected: run this in another terminal 
+        <pre>
+        arm-none-eabi-gdb BlinkingLights.elf
+        (gdb) target extended-remote :4242
+        (gdb) load
+        (gdb) continue
+        </pre>
+
+        mass erase a chip
+        <pre>
+        st-flash erase
+        </pre>
+
+
+        <h2>OpenOCD</h2> 
+
+        (from the link above) the first method I used to get up and running with an STM discovery board.
+
+        <pre>
+        #install your debugger and programmer – there are a few alternatives
+        sudo apt-get install openocd
+
+        #you’re not quite done, you need to give your regular user access to the USB port. So add a udev rule using
+        sudo nano /etc/udev/rules.d/99-stlink.rules
+
+        #and add the following line:
+        ATTRS{idVendor}=="0483", ATTRS{idProduct}=="3748", MODE="0666"
+
+        #You can then do
+        sudo udevadm control --reload-rules
+
+        #To reload the rules. Plug in your dev board and run lsusb to check that the you can see a line that looks similar to your udev rule. You can run:
+        openocd -f /usr/share/openocd/scripts/board/stm32f3discovery.cfg
+
+        </pre>
+
+        With libopencm3
+        <pre>
+        cd libopencm3-examples/examples/stm32/f3/stm32f3-discovery/miniblink
+        openocd -f /usr/share/openocd/scripts/board/stm32f3discovery.cfg
+        #-------
+        telnet 127.0.0.1 4444
+        reset halt 
+        flash write_image erase miniblink.elf
+        reset   #runs the damn thing 
+        </pre>
+
+        <pre>
+            openocd -d0 -f board/yourboard.cfg -c "init;targets;halt;flash write_image erase firmware.hex;shutdown"
+        </pre>
+
+        <h2><b>GDB</b></h2>
+
+        The king of debuggers and really the best out there. I first used it with the black magic probe, but it is used with SWD and others as well. 
+        There are whole books just on GDB, but you can learn the basics in a day. Life changing stuff!!
+
+        <b>GDB environment</b>
+
+        I think I ran this to get GDB- but not certain - test to see if it exists first
+        you need to be aware of where your tool comes from
+        <pre>
+
+        Read this:
+        http://gnuarmeclipse.github.io/toolchain/install/
+
+        I think it is a bad idea to trust ubuntu to find the "right" version with apt:
+            sudo apt-get install gdb-arm-none-eabi
+        </pre>
+
+        <b>gdbinit</b>
+
+        When you run the GDB an initialization file, called .gbdinit, is searched in the GDB home directory. If the GDB finds a 
+        .gdbinit file, GDB executes all the commands in that file. 
+
+        <b>BlackMagicProbe and gdbinit</b>
+
+        Just add the following lines to the file ~/.gdbinit
+        <pre>
+        set target-async on
+        set confirm off
+        set history save
+        set mem inaccessible-by-default off
+        tar ext /dev/cu.usbmodemSOMESERIAL1
+        mon version
+        mon swdp_scan
+        #mon jtag_scan
+        att 1
+        </pre>
+
+        <b> using GDB </b>
+
+        Basic idea 
+        <pre>
+        cd examples/stm32/f1/stm32vl-discovery/miniblink
+        arm-none-eabi-gdb miniblink.elf
+        load
+        run
+        </pre>
+
+        Remember, your code is a location in memory, including all your libraries.
+        <pre>
+        (gdb) info line
+        Line 175 of "main.c" starts at address 0x80002f6 <main+6> and ends at 0x80002fa <main+10>.
+        </pre>
+
+        If you get lost try something like this
+        <pre>
+        (gdb) line main
+        </pre>
+
+
+        Some gdb configs and what thy do 
+        <pre>
+        set target-async on:                 Enable background execution commands.
+        set confirm off:                     This disables the really annoying “are you sure” questions. 🙂
+        set history save:                    This forces GDB to save the command history.
+        set mem inaccessible-by-default off: This is one of the most important commands here. 
+                                             If you don’t set this option the debugger will prevent you from doing so  
+                                             as it has no idea that this memory is actually accessible. 
+        tar ext /dev/cu.usbmodemSOMESERIAL1: tell gdb to connect to Black Magic Probe
+        mon version:                         Print version of the Black Magic Probe.
+        mon swdp_scan:                       Scan for devices using SWD protocol.
+        att 1:                               Attach to the first process. On a microcontroller you will have only one process…
+
+        </pre>
+
+        GDB commands that you might find useful when playing around with code:
+
+        <pre>
+        load -> load the binary from the provided elf file. 
+              (Note: it detects if the elf file changed on the hard disk and loads a new one if available.
+               So you don’t have to quit GDB every time when you recompile your code)
+        run  -> start the execution of your firmware
+        backtrace -> print the call stack trace of the current line of code being executed
+        make -> runs make command in the directory you started gdb. Very useful if you want to update the binary you are running really quick.
+        break filename:lineno -> you can add a breakpoint inside your code. 
+              GDB will stop the execution of the program as soon as the line is hit by the firmware.
+        step -> execute one single line of code and return back to the command line
+        next -> same as step but it does not enter into the functions called and skips them. 
+             Useful if you want to step over functions you know take forever and you are not interested in what they are actually doing. 
+        print variablename -> print the content of a variable
+        print/x variablename -> print the content of a variable as HEX
+        list -> prints the context of the line being executed at the very moment
+        kill -> if used in a GDB script it will reset the MCU and exit GDB. Very useful as last command of a GDB script.
+        </pre>
+
+
+        Detaching from the target device
+        <pre>
+        detach
+        kill
+        </pre>
+
+
+        <b>breakpoints</b>
+
+
+        <pre>
+        All program to be debugged in gdb must be compiled by gcc with the option "-g" ????
+        </pre>
+
+        <pre>
+        ARM does not define a specific breakpoint instruction. 
+
+        __asm__("BKPT");
+
+        __builtin_trap() intrinsic 
+        raise(SIGTRAP).
+        </pre>
+
+
+
+        <b>GDB in STLINK </b>
+
+        run a debugger with st-util 
+        <pre>
+        st-util -l
+        </pre>
+
+        alternative method -plug in board and look in dev
+        <pre>
+        st-util 4242 /dev/stlinkv2_5
+        </pre>
+
+        When connected: run this 
+        <pre>
+        arm-none-eabi-gdb BlinkingLights.elf
+        (gdb) target extended-remote :4242
+        (gdb) load
+        (gdb) continue
+        </pre>
+
+        <b> GDB with Black Magic Probe (BMP) </b>
+
+        flash your firmware with GDB/Black magic probe
+
+        <pre>
+        cd examples/1bitsy/pwmledfade
+        arm-none-eabi-gdb pwmledfade.elf
+        target extended-remote /dev/ttyACM0
+        monitor version
+        monitor jtag_scan
+        attach 1
+        load
+        run
+
+        #the next thing is a button combination
+        Ctrl-C
+        Ctrl-D
+        </pre>
+
+
+        <b> JTAG notes </b>
+
+        Bus description
+        <pre>
+        TCK: [Test Clock] has noting to do with the board or system clock. The Test Clock is used to load the test mode data from the TMS pin, and the test data on the TDI pin [on the rising edge]. On the falling edge test clock outputs the test data on the TDO pin. As with any clock pin this line needs to be terminated in order to reduce reflections. The termination should be a 68 ohm resistor in series with a 100pF capacitor to ground. The TCK signal is bused to all Integrated Circuits [IC] in the JTAG chain. The signal may require buffering or be fanned out by multiple drivers depending on the distance and number of devices in the chain. Using multiple drivers would also require a termination resistor on each TCK line.
+
+        TMS: [Test Mode Select Input] controls the operation of the test logic, by receiving the incoming data]. The value at the input on the rising edge of the clock controls the movement through the states of the TAP controller. The TMS line has an internal pull-up, so the input is high with no input. The TMS signal is bused to all ICs in the JTAG chain. The TMS line should have a 10k pull-up resistor on the line.
+
+        TDI: [Test Data Input] receives serial input data which is either feed to the test data registers or instruction register, but depends on the state of the TAP controller. The TDI line has an internal pull-up, so the input is high with no input. The TDI signal is feed to the TDI pin of the first IC in the JTAG chain. The TDO signal from that IC is then sent to the TDI pin of the next IC in the chain or sent back out to the JTAG header. The TDI line should have a 10k pull-up resistor on the line.
+
+        TDO: [Test Data Output] outputs serial data which comes from either the test data registers or instruction register, but depends on the state of the TAP controller. Data applies to the TDI pin will appear at the TDO pin but may be shifted of a number of clock cycles, depending on the length of the internal register. The TDO pin is high-Impedance. The TDO signal is the output from a JTAG device that feed the TDI input of another JTAG device. The TDO line should have a 10k pull-up resistor on the line. The TDO signal should also include a 22 ohm series resistor placed near the last device in the JTAG chain.
+
+        TRST: [Test Rest] will asynchronously reset the JTAG test logic. The logic is reset (with TRST) regardless of the state of TMS or TCLK. The TRST signal is bused to all ICs in the JTAG chain. The TRST signal should include a pull-down resistor when possible to reduce the chance the signal floats
+        </pre>
+
+        <b>STM32 ARM notes </b>
+
+        <b>sys tick</b>
+
+        Does not work right.... WHY?
+        <pre>
+        #include <libopencm3/cm3/systick.h>
+        static volatile uint32_t system_millis;
+        void sys_tick_handler(void){system_millis++;}
+        void msleep(uint32_t delay)
+        {
+            uint32_t wake = system_millis + delay;
+            while (wake > system_millis);
+        }
+        </pre>
+
+
+        <b> GPIO/ Configuration Registers </b>
+
+        // http://hertaville.com/stm32f0-gpio-tutorial-part-1.html
+
+        <pre>
+
+            GPIO port mode register (GPIOx_MODER)
+            GPIO port output type register (GPIOx_OTYPER)
+            GPIO port output speed register (GPIOx_OSPEEDR)
+            GPIO port pull-up/pull-down register (GPIOx_PUPDR)
+            GPIO port input data register (GPIOx _IDR)
+            GPIO port outp ut data register (GPIOx_ODR)
+            GPIO port bit set/reset register (GPIOx _BSRR)
+            GPIO port configuration lock register (GPIOx_LCKR)
+            GPIO alternate function low register (GPI Ox_AFRL)
+            GPIO alternate function high register (GPIOx_AFRH)
+            GPIO Port bit reset register (GPIOx_BRR)
+
+        </pre>
+
+
+        <pre>
+            The IO pins are arranged as five ports each 
+            having 16 IO lines. 
+        </pre>
+
+        <pre>
+            The STM32 has four configuration registers for each of the ports.
+
+                Port mode register – GPIOx_MODER
+                Output type register – GPIOx_OTYPER
+                Speed register – GPIOx_OSPEEDR
+                Pull-up/Pull-down register – GPIOx_PUPDR
+
+            Each GPIO port has two 32-bit wide configuration 
+            registers; these two registers combine to give a 64-bit 
+            wide configuration register. 
+
+        </pre>
+
+        <pre>
+            This 32 bit register holds 2 bit values which defines the operation mode. The modes are:
+            00 - Input
+            01 - General purpose output
+            10 - Alternate function
+            11 - Analog
+        </pre>
+
+        <b>Wiring notes for various STM32 devices </b>
+
+        <b> JTAG HEADER </b>
+
+        20 Pin JTAG     
+        <pre>
+            Function        Pin     Function
+            1   TRST        2   GND
+            3   TDO         4   GND
+            5   TDI         6   GND
+            7   TMS         8   GND
+            9   TCK         10  GND
+            11  VPP_E       12  GND
+            13  A/W         14  GND
+            15  User 0      16  GND
+            17  Rdy/Bsy     18  GND
+            19  User 1      20  Vcc
+        </pre>
+
+
+        <b> NUCLEO SWD </b>
+
+        Nucleo to "Blue pill" 
+
+        Unhook the jumpers on board to use with external board
+
+        works with opencm3 stm32vl-discovery code, even though it is a different board
+        <pre>
+            1 VDD_TARGET/ VC C/ 3V3   - (front header far left)
+            2 SWCLK                   - (front header second from right)
+            3 GND                     - (front header far right)
+            4 SWDIO                   - (front header second from left)
+            5 NRST                    - (7/NRST)  - *SEEMS TO NOT MATTER AT ALL* 
+            6 SWO                     - NC
+        </pre>
+
+
+        <b> JTAG TO STM32 DISCOVERY </b>
+          
+        UNHOOK ALL THREE JUMPERS ON THE BOARD FIRST!
+        <pre>
+            VCC->VDD
+            TMS->PA13 , pin 46
+            TCK->PA14 , pin 49
+            TDO->PB3  , pin 55 
+            RST->NRST , pin 7
+            TDI->PA15 , pin 50
+            GND->GND  , pin 64, etc
+        </pre>
+
+        STM32F100/MB913 (Hmm - notice it is the same)
+        <pre>
+            VCC->3V3
+            TMS->PA13  
+            TCK->PA14  
+            TDO->PB3    
+            RST->RST  
+            TDI->PA15  
+            GND->GND  
+        </pre>
+
+        <b>STM32 hardware notes</b>
+
+        One of the maddening things about STM32, is the sheer number of chips, all with cryptic part numbers that almost sound similar. As if the myriad of development tools wasnt bad enough, its hard to know which  device to begin with. 
+        These are the tools I have tested and had SOME luck with.
+
+        <b> Bootloader info </b>
+
+        Boot0 Pins
+        <pre>
+            when the STM32 is powered up (and reset line is released), an internal bootcode (bootloader) will check if the flash is blank. 
+            If the flash is blank, the bootloader will enable and listen for some peripherals (some UART/I2C/SPI/USB) 
+            to communicate with the external world as a mean to download and flashing the device.
+
+            If the flash is not blank, the user code in the flash will start.
+
+            If boot0 is tied high, the bootloader will assume the flash is blank.
+            Another way to program the flash of the microcontroller is by debugger (ST Link) through SWD or JTAG.
+
+            This does not apply universally to all STM32, only to the newer ones -in the 'L1 this is not implemented.
+
+            For an exhaustively detailed list, see Table 2. Bootloader activation patterns in AN2606.
+
+        </pre>
+
+
+        <b>Connect under reset</b>
+
+        <pre>
+            For connect under reset to work the programmer must have control over the reset pin
+            If you pull the BOOT0 pin high during power up, the MCU will start into the internal bootloader 
+            and you can gain access using several serial protocols (see the reference manual for more details)
+
+        </pre>
+
+
+        <b> other weird methods </b>
+        <pre>
+            mass-storage - mbed          - ???
+            DFU - Device Firmware Update - WTF?
+            HID - Human Interface Device - ???
+        </pre>
+
+
+        <h2>Chips</h2>
+
+        <b>STM32F1</b>b>
+
+        <b>STM32F100RBT6B </b>- Discovery Value line MB913C
+        <pre>
+            works with Black magic probe, GDB works 
+        </pre>
+
+        <b>STM32F103R8T6 </b>- Nucleo F103RB
+        <pre>
+            works with st-util, st-flash - GDB worked once but I cant get it to work now.... 
+            works with libopencm3 f1/stm32vl-discovery example 
+        </pre>
+
+        <b>STM32F103C8T6</b> (blue pill)
+
+        <pre>
+            wont work with Black magic probe - seems to work great with texane/st-link
+            debugger seems to be borked though
+        </pre>
+
+        <pre>
+        72 MHz
+        Cortex M3
+        64K Flash
+        20 Kbytes of SRAM
+        2 x 12-bit, 1 μs A/D converters
+        3 USARTs
+        Up to 2 SPIs
+        2 x I2C interfaces
+        7-channel DMA controller
+        </pre>
+
+        <b>STM32F3</b>
+        <b>STM32F303VCT6</b> - Discovery with Gyro, Accelerometer, Magnetometer
+        <pre>
+        </pre>
+
+        <b>STM32F4</b>
+
+        <b>STM32F401RET6</b> - Nucleo F401RE
+        <pre>
+        black magic probe says -> Exception: JTAG-DP invalid ACK
+        no luck with st-link either 
+        openocd talks to board but no blinky ... (not sure which ocm3 code to use)
+        </pre>
+
+        <b>STM32F401VCT6U</b> - Discovery 401C-DISCO
+        <pre>
+        black magic probe acts like it will work but goes dead on load command??
+        </pre>
+
+        <b>STM32F411RET6U</b> -NucleoF411RE
+        <pre>
+        Seems to work okay with Black Magic Probe and libopenCM3 - little glitchty
+        need more testing  
+        </pre>
+
+
+        <b>STM32F429ZIT6U</b> -Discovery with LCD screen and SRAM 
+        <pre>
+        </pre>
+
+
+        <b>STM32F415</b> (1bitsy)
+        <pre>
+        168 MHz
+        Cortex M4
+        Up to 1 Mbyte of Flash 
+        192+4KB RAM
+        two 12-bit DACs, three 12-bit ADCs 
+        6x USARTs running at up to 10.5 Mbit/s 
+        3x SPI running at up to 42 Mbit/s
+        3x I²C 
+        Up to 17 timers
+        </pre>
+
+        <b>STM32L1</b>
+
+        STM32L100RCT6 - STM32L100C-DISCO 
+        <pre>
+        I had good luck with this board 
+        Black magic probe and GDB work fine 
+        St-Link wont work with GDB but programs fine 
+        </pre>
+
+        <pre>
+        24 MHz
+        256KB Flash, 
+        16KB SRAM
+        </pre>
+
+
+        <h2>Boards</h2>
+
+        <b>STM32 Discovery </b>
+
+        <pre>
+        CHEAP boards (10-20 dollars) and they all come with a ST-Link programmer on the board, and usually fun peripherals as well.
+        (Buttons, LCD, Accelerometers, etc)
+        Defacto standard STM32 tools, can be reflashed, repurposed, hacked etc
+        </pre>
+
+        <b>blue pill</b>
+
+        <pre>
+        Oh China, you never cease to amaze with stuff so cheap it feels illegal. In fact, it often is illegal. 
+        But who really cares about international copyright laws anyway? 
+
+        There are 3 versions blue, red and black. I have only tested the blue. It works as advertised. 
+
+        Make sure to pick up an ST-Link clone while you are placing your ebay orders. There is no better bang for the buck than these. 
+
+        On the other hand. GDB behaved strangely for me with this setup (lists wrong address in code, failed to stop at a breakpoint), so maybe running a tool reverse engineered from a proprietary format on hardware that was cloned in China may not be the best approach for learning. BMP seems to be more reliable, but I need to do more testing 
+         
+        The tools seem to work fine for uploading and running code however... 
+        </pre>
+
+        <b>1bitsy</b>
+
+        Made in my home town by a guy I met in person. I am neutral on them, they seem high tech, but frankly a bit expensive compared to other options.
+        Pretty much designed to work with the BMP, so you are looking at 100 dollars to get up and running. 
+        If you get a "Blue Pill" and JLINK clone you can be up and running for under $10, with a less powerful but very capable chip. 
+
+
+        To get info/help 
+        <pre>
+
+        https://github.com/1BitSy
+        https://github.com/1BitSy/1bitsy-hardware
+
+        https://gitter.im/1bitsy/Lobby
+        https://gitter.im/blacksphere/blackmagic
+        https://gitter.im/libopencm3/discuss 
+        </pre>
+
+
+        <b> 1Bitsy Examples from lesson</b>
+
+        <pre>
+        https://github.com/esden/1bitsy-bmpm-exercises/tree/master/class-1
+        </pre>
+
+        From the video transcript 
+        <pre>
+        01 min 10 secs sudo add-apt-repository ppa:team-gcc-arm-embedded/ppa
+        01 min 30 secs sudo apt-get update 
+        01 min 38 secs sudo apt-get install gcc-arm-embedded 
+        01 min 51 secs sudo apt-get install git 
+        02 min 02 secs git clone https://github.com/1bitsy/1bitsy-examples.git 
+        02 min 07 secs cd 1bitsy-examples 
+        02 min 12 secs git submodule init 
+        02 min 15 secs git submodule update 
+        02 min 21 secs make 
+        02 min 28 secs id 
+        02 min 32 secs sudo adduser $USER dialout 
+        02 min 41 secs id 
+        02 min 48 secs <logout> 
+        04 min 54 secs <Plug in Black Magic Probe to microUSB> 
+        05 min 32 secs dmesg | tail 
+        05 min 34 secs <Output includes: "ttyACM0" and "ttyACM1"> 
+        05 min 42 secs <Plug in 1bitsy to microUSB> 
+        05 min 43 secs dmesg | tail 
+        05 min 44 secs <Output includes: "ttyACM2" - but ONLY if there is already firmware on it that makes it appear as a serial device. This is NOT the case for the Kickstart one... > 
+        05 min 45 secs <Connect 1bitsy and Black Magic Probe using the JTAG cable> 
+        05 min 48 secs cd ~/1bitsy-examples/examples/1bitsy/fancyblink 
+        05 min 49 secs arm-none-eabi-gdb fancyblink.elf 
+        05 min 54 secs target extended-remote /dev/ttyACM0 
+        06 min 04 secs monitor version 
+        06 min 11 secs monitor help 
+        06 min 17 secs monitor jtag_scan 
+        06 min 23 secs attach 1 
+        06 min 27 secs load 
+        06 min 30 secs run 
+        06 min 32 secs y 
+        06 min 37 secs <Ctrl + C> 
+        06 min 38 secs list 
+        06 min 43 secs tui enable 
+        06 min 47 secs cont 
+        06 min 51 secs <Ctrl + C> 
+        06 min 52 secs step 
+        06 min 53 secs start 
+        06 min 56 secs y 
+        07 min 00 secs next 
+        07 min 04 secs step 
+        07 min 07 secs next 
+        07 min 07 secs next 
+        07 min 17 secs next 
+        07 min 22 secs cont 
+        07 min 22 secs cont 
+        07 min 25 secs quit 
+        07 min 26 secs y 
+        07 min 26 secs y DFU part: 
+        07 min 44 secs <Press the user button and insert microUSB cable> 
+        07 min 47 secs dmesg | tail 
+        07 min 50 secs lsusb
+        07 min 54 secs <Output includes: "STMicroelectronics STM Device in DFU Mode"> 
+        07 min 57 secs sudo apt-get install dfu-util 
+        08 min 13 secs make fancyblink.bin 08 min 18 secs ls 
+        08 min 23 secs sudo dfu-util -d 0483:df11 -c 1 -a 0 -s 0x08000000:leave -D fancyblink.bin 
+        09 min 07 secs <1bitsy is now programmed!> 
+        </pre>
+
+        <b> Tested code samples </b>
+
+        <h2>with libopencm3 </h2>
+
+        <b>I2C with 1bitsy</b>
+        mostly taken from https://github.com/brabo/stm32f4-i2c-scan, and tested 
+
+        Dont forget to add pull ups on the 2 data bus pins. i2C is open collector. A 10K resistor works for 3.3V
+
+        i2c.c
+        <pre>
+            <code class="c">  
+
+                #include <stdint.h>
+                #include <stdio.h>
+                #include <libopencm3/stm32/i2c.h>
+                #include <libopencm3/stm32/rcc.h>
+                #include <libopencm3/stm32/gpio.h>
+                #include "i2c.h"
+
+
+                static uint8_t i2c_start(uint32_t i2c, uint8_t address, uint8_t mode);
+
+                void i2c_init(void)
+                {
+                    rcc_periph_clock_enable(RCC_GPIOA);
+                    rcc_periph_clock_enable(RCC_GPIOC);
+                    rcc_periph_clock_enable(RCC_I2C3);
+
+                    //GPIO A8 is SCL 
+                    gpio_mode_setup(GPIOA, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO8);
+                    gpio_set_output_options(GPIOA, GPIO_OTYPE_OD, GPIO_OSPEED_50MHZ,
+                        GPIO8);
+                    gpio_set_af(GPIOA, GPIO_AF4, GPIO8);
+
+                    //GPIO C9 SDA 
+                    gpio_mode_setup(GPIOC, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO9);
+                    gpio_set_output_options(GPIOC, GPIO_OTYPE_OD, GPIO_OSPEED_50MHZ,
+                        GPIO9);
+                    gpio_set_af(GPIOC, GPIO_AF4, GPIO9);
+
+
+                    i2c_peripheral_disable(I2C3); /* disable i2c during setup */
+                    i2c_reset(I2C3);
+
+                    i2c_set_fast_mode(I2C3);
+                    i2c_set_clock_frequency(I2C3, I2C_CR2_FREQ_42MHZ);
+                    i2c_set_ccr(I2C3, 35);
+                    i2c_set_trise(I2C3, 43);
+                    //i2c_set_speed(I2C3, 0);
+
+                    i2c_peripheral_enable(I2C3); /* finally enable i2c */
+
+                    i2c_set_own_7bit_slave_address(I2C3, 0x00);
+                }
+
+                void i2c_deinit(void)
+                {
+                    i2c_send_stop(I2C3);
+
+                    i2c_reset(I2C3);
+                    i2c_peripheral_disable(I2C3); /* disable i2c during setup */
+
+                }
+
+                static uint8_t i2c_start(uint32_t i2c, uint8_t address, uint8_t mode)
+                {
+                    i2c_send_start(i2c);
+
+                    /* Wait for master mode selected */
+                    while (!((I2C_SR1(i2c) & I2C_SR1_SB)
+                        & (I2C_SR2(i2c) & (I2C_SR2_MSL | I2C_SR2_BUSY))));
+
+                    i2c_send_7bit_address(i2c, address, mode);
+
+                    int timeout = 20000;
+                    /* Waiting for address is transferred. */
+                    while (!(I2C_SR1(i2c) & I2C_SR1_ADDR)) {
+                        if (timeout > 0) {
+                            timeout--;
+                        } else {
+                            return 1;
+                        }
+                    }
+
+
+                    /* Cleaning ADDR condition sequence. */
+                    uint32_t reg32 = I2C_SR2(i2c);
+                    (void) reg32; /* unused */
+
+                    return 0;
+                }
+
+                uint8_t i2c_write(uint32_t i2c, uint8_t address, uint8_t reg,
+                    uint8_t data)
+                {
+                    i2c_start(i2c, address, I2C_WRITE);
+
+                    i2c_send_data(i2c, reg);
+
+                    while (!(I2C_SR1(i2c) & (I2C_SR1_BTF)));
+                    i2c_send_data(i2c, data);
+
+                    while (!(I2C_SR1(i2c) & (I2C_SR1_BTF)));
+
+                    i2c_send_stop(i2c);
+
+                    return 0;
+                }
+
+                int i2c_read(uint32_t i2c, uint8_t address, uint8_t reg)
+                {
+                    uint32_t timeout = 20000;
+                    while ((I2C_SR2(i2c) & I2C_SR2_BUSY));  
+
+                    if (i2c_start(i2c, address, I2C_WRITE)) {
+                        return 0;
+                    }
+                    i2c_send_data(i2c, reg);
+
+                    timeout = 20000;
+                    while (!(I2C_SR1(i2c) & (I2C_SR1_BTF))) {
+                        if (timeout > 0) {
+                            timeout--;
+                        } else {
+                            return -1;
+                        }
+                    }
+
+                    i2c_start(i2c, address, I2C_READ);
+
+                    i2c_send_stop(i2c);
+
+                    while (!(I2C_SR1(i2c) & I2C_SR1_RxNE));
+
+                    int result = (int)i2c_get_data(i2c);
+
+                    I2C_SR1(i2c) &= ~I2C_SR1_AF;
+                    msleep(50);
+                    i2c_send_stop(i2c);
+
+                    return result;
+                }
+            </code>
+        </pre>
+
+        i2c.h
+        <pre>
+            <code class="c">          
+                #ifndef __I2C_H
+                #define __I2C_H
+
+                #define I2C_CR2_FREQ_MASK   0x3ff
+                #define I2C_CCR_CCRMASK 0xfff
+                #define I2C_TRISE_MASK  0x3f
+
+                void i2c_init(void);
+                void i2c_deinit(void);
+                uint8_t i2c_write(uint32_t i2c, uint8_t address, uint8_t reg,
+                    uint8_t data);
+                int i2c_read(uint32_t i2c, uint8_t address, uint8_t reg);
+
+
+                #endif
+            </code>
+        </pre>
+
+        main.c
+        
+        <pre>
+            <code class="c">  
+
+                #include <stdint.h>
+                #include <stdio.h>
+                #include <libopencm3/stm32/rcc.h>
+                #include <libopencm3/stm32/gpio.h>
+                #include <libopencm3/stm32/usart.h>
+                #include <libopencm3/stm32/i2c.h>
+
+                #include "i2c.h"
+
+                int main(void)
+                {
+                    i2c_init();
+                    while(1){
+                        //i2c_write(uint32_t i2c, uint8_t address, uint8_t reg, uint8_t data)
+                        i2c_write(I2C3, 0x55, 0x55, 0x55);
+                    }
+                    return 0;
+                }
+            <code>
+        </pre>
+
+
+        <b>SPI example with 1bitsy</b>
+        
+        <pre>
+            <code class="c">
+
+                #include "../common/button_boot.h"
+
+                #include <libopencm3/stm32/rcc.h>
+                #include <libopencm3/stm32/gpio.h>
+
+                #include <libopencm3/stm32/spi.h>
+
+
+                #include "klspi.h"
+
+                /*
+
+                   inspired by  :
+                   https://github.com/ericherman/stm32f4-discovery-example
+
+                */
+
+
+                static void setup_spi(void)
+                {
+                    /* chip select */
+                    gpio_mode_setup(GPIOE, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, GPIO3);
+                    /* set to high which is not-selected */
+                    gpio_set(GPIOE, GPIO3);
+
+                    gpio_mode_setup(GPIOA, GPIO_MODE_AF, GPIO_PUPD_NONE,
+                            /* serial clock */
+                            GPIO5 |
+                            /* master in/slave out */
+                            GPIO6 |
+                            /* master out/slave in */
+                            GPIO7);
+                    gpio_set_af(GPIOA, GPIO_AF5, GPIO5 | GPIO6 | GPIO7);
+
+                    spi_disable_crc(SPI1);
+                    spi_init_master(SPI1, SPI_CR1_BAUDRATE_FPCLK_DIV_32,
+                            /* high or low for the peripheral device */
+                            SPI_CR1_CPOL_CLK_TO_1_WHEN_IDLE,
+                            /* CPHA: Clock phase: read on rising edge of clock */
+                            SPI_CR1_CPHA_CLK_TRANSITION_2,
+                            /* DFF: Date frame format (8 or 16 bit) */
+                            SPI_CR1_DFF_8BIT,
+                            /* Most or Least Sig Bit First */
+                            SPI_CR1_MSBFIRST);
+
+                    spi_enable_software_slave_management(SPI1);
+                    spi_set_nss_high(SPI1);
+
+                    //spi_clear_mode_fault(SPI1);
+
+                    spi_enable(SPI1);
+                }
+
+
+                static void setup_main_clock(void)
+                {
+                    rcc_clock_setup_hse_3v3(&rcc_hse_25mhz_3v3[RCC_CLOCK_3V3_168MHZ]);
+                }
+
+                static void setup_peripheral_clocks(void)
+                {
+                    rcc_periph_clock_enable(RCC_GPIOA);
+                    rcc_periph_clock_enable(RCC_GPIOD);
+                    rcc_periph_clock_enable(RCC_GPIOE);
+                    rcc_periph_clock_enable(RCC_OTGFS);
+                    rcc_periph_clock_enable(RCC_SPI1);
+                }
+
+
+                static uint8_t send_command(uint16_t command, uint8_t data)
+                {
+                    uint16_t return_value;
+                    uint16_t ignore;
+
+                    gpio_clear(GPIOE, GPIO3);
+                    spi_send(SPI1, command);
+                    ignore = spi_read(SPI1);
+                    (void)ignore;
+                    spi_send(SPI1, data);
+                    return_value = spi_read(SPI1);
+                    gpio_set(GPIOE, GPIO3);
+                    return (uint8_t)return_value;
+                }
+
+                static uint8_t keith_test(uint8_t byte)
+                {
+                    uint16_t command;
+                    uint8_t data;
+
+                    data = 0;
+
+                    command =
+                        /* READ bit */
+                        (0x1 << 7) |
+                        /* MS bit:  When 0 do not increment address */
+                        (0x0 << 6) |
+                        /* bits 2-7 are address */
+                        (byte << 0);
+
+                    return send_command(command, data);
+                }
+
+
+                int main(void)
+                {
+                    int i;
+
+                    button_boot(); // does not appear to work 
+                    
+                    setup_main_clock();
+                    setup_peripheral_clocks();
+
+                    setup_spi();
+                 
+                    while (1) {
+                        
+                        uint8_t my_data =  keith_test(0xaa);
+
+                        for (i = 0; i < 5; i++) {   /* Wait a bit. */
+                            __asm__("nop");
+                        }
+
+                    }
+
+                    return 0;
+                }
+            </code>
+        </pre>
+
+
+
+
+        <h2>USART ECHO STM32L152C DISCO (modified libopencm3 usart demo)</h2>
+
+        USE PINS:
+        PA2 = TX 
+        PA3 = RX
+
+        <pre>
+            <code class="c">        
+                #include <libopencm3/stm32/rcc.h>
+                #include <libopencm3/stm32/gpio.h>
+                #include <libopencm3/stm32/usart.h>
+
+                static void clock_setup(void)
+                {
+                    /* Enable GPIOD clock for LED & USARTs. */
+                    rcc_periph_clock_enable(RCC_GPIOA);
+                    rcc_periph_clock_enable(RCC_GPIOB);
+
+                    /* Enable clocks for USART2. */
+                    rcc_periph_clock_enable(RCC_USART2);
+                }
+
+
+                static void usart_setup(void)
+                {
+                    /* Setup USART2 parameters. */
+                    usart_set_baudrate(USART2, 38400);
+                    usart_set_databits(USART2, 8);
+                    usart_set_stopbits(USART2, USART_STOPBITS_1);
+
+                    usart_set_mode(USART2, USART_MODE_TX_RX ); //USART_MODE_TX
+
+                    usart_set_parity(USART2, USART_PARITY_NONE);
+                    usart_set_flow_control(USART2, USART_FLOWCONTROL_NONE);
+
+                    /* Finally enable the USART. */
+                    usart_enable(USART2);
+                }
+
+                static void gpio_setup(void)
+                {
+                    /* Setup GPIO pin GPIO7 on GPIO port B for Green LED. */
+                    gpio_mode_setup(GPIOB, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, GPIO7);
+
+                    /* Setup GPIO pins for USART2 TX/RX. */
+                    gpio_mode_setup(GPIOA, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO2); //TX
+                    gpio_mode_setup(GPIOA, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO3); //RX
+
+                    /* Setup USART2 TX/RX pin as alternate function. */
+                    gpio_set_af(GPIOA, GPIO_AF7, GPIO2); //TX
+                    gpio_set_af(GPIOA, GPIO_AF7, GPIO3); //RX
+
+                }
+
+                int main(void)
+                {
+                    int i, j = 0, c = 0;
+
+                    clock_setup();
+                    gpio_setup();
+                    usart_setup();
+
+                    /* Blink the LED (PD12) on the board with every byte. */
+                    while (1) {
+                        gpio_toggle(GPIOB, GPIO7); /* LED on/off */
+                        char ch = 0;
+
+                        ch = usart_recv_blocking(USART2);  
+                        usart_send_blocking(USART2, ch) ;
+
+                        for (i = 0; i < 100000; i++) { /* Wait a bit. */
+                            __asm__("NOP");
+                        }
+                    }
+
+                    return 0;
+                }
+            </code>
+        </pre>
+
+
+        <b>with STM32 standard library</b>
+
+        Makefile
+        <pre>
+
+        #TO SEE ASSEMBLY FILES 
+        #COMPILE_OPTS = -c -save-temps -mcpu=cortex-m3 -mthumb -Wall -g -O0 
+
+        #NORMAL COMPILE 
+        COMPILE_OPTS = -mcpu=cortex-m3 -mthumb -Wall -g -ggdb -O0
+
+        ####################
+
+
+        INCLUDE_DIRS = -I . -I lib/inc
+        LIBRARY_DIRS = -L lib
+
+        CC = arm-none-eabi-gcc
+        CFLAGS = $(COMPILE_OPTS) $(INCLUDE_DIRS)
+
+        CXX = arm-none-eabi-g++
+        CXXFLAGS = $(COMPILE_OPTS) $(INCLUDE_DIRS)
+
+        AS = arm-none-eabi-gcc
+        ASFLAGS = $(COMPILE_OPTS) -c
+
+        LD = arm-none-eabi-gcc
+        LDFLAGS = -Wl,--gc-sections,-Map=$@.map,-cref,-u,Reset_Handler $(INCLUDE_DIRS) $(LIBRARY_DIRS) -T stm32.ld
+
+        OBJCP = arm-none-eabi-objcopy
+        OBJCPFLAGS = -O binary
+
+        AR = arm-none-eabi-ar
+        ARFLAGS = cr
+
+        MAIN_OUT = main
+        MAIN_OUT_ELF = $(MAIN_OUT).elf
+        MAIN_OUT_BIN = $(MAIN_OUT).bin
+
+        # all
+        all: $(MAIN_OUT_ELF) $(MAIN_OUT_BIN)
+
+        # main
+        $(MAIN_OUT_ELF): main.o stm32f10x_it.o lib/libstm32.a
+            $(LD) $(LDFLAGS) main.o stm32f10x_it.o lib/libstm32.a --output $@
+
+        $(MAIN_OUT_BIN): $(MAIN_OUT_ELF)
+            $(OBJCP) $(OBJCPFLAGS) $< $@
+
+
+        # flash
+        flash: all
+            openocd -f jtag/openocd.cfg -c "program main.bin 0x08000000 verify reset exit"
+
+
+        # libstm32.a
+        LIBSTM32_OUT = lib/libstm32.a
+
+        LIBSTM32_OBJS = \
+         lib/src/stm32f10x_adc.o \
+         lib/src/stm32f10x_bkp.o \
+         lib/src/stm32f10x_can.o \
+         lib/src/stm32f10x_dma.o \
+         lib/src/stm32f10x_exti.o \
+         lib/src/stm32f10x_flash.o \
+         lib/src/stm32f10x_gpio.o \
+         lib/src/stm32f10x_i2c.o \
+         lib/src/stm32f10x_iwdg.o \
+         lib/src/stm32f10x_lib.o \
+         lib/src/stm32f10x_nvic.o \
+         lib/src/stm32f10x_pwr.o \
+         lib/src/stm32f10x_rcc.o \
+         lib/src/stm32f10x_rtc.o \
+         lib/src/stm32f10x_spi.o \
+         lib/src/stm32f10x_systick.o \
+         lib/src/stm32f10x_tim.o \
+         lib/src/stm32f10x_tim1.o \
+         lib/src/stm32f10x_usart.o \
+         lib/src/stm32f10x_wwdg.o \
+         lib/src/cortexm3_macro.o \
+         lib/src/stm32f10x_vector.o
+
+        $(LIBSTM32_OUT): $(LIBSTM32_OBJS)
+            $(AR) $(ARFLAGS) $@ $(LIBSTM32_OBJS)
+
+        $(LIBSTM32_OBJS): stm32f10x_conf.h
+
+
+        clean:
+            -rm *.s *.i *.o lib/src/*.o $(LIBSTM32_OUT) $(MAIN_OUT_ELF) $(MAIN_OUT_BIN)
+
+        </pre>
+        
+        <b>STM32F103C8T6 SPI example with STM32 standard peripheral library</b>
+
+        (not fully implemented )
+        <pre>
+        #include "stm32f10x_lib.h"
+
+        GPIO_InitTypeDef GPIO_InitStructure;
+        ErrorStatus HSEStartUpStatus;
+
+        void RCC_Configuration(void);
+        void NVIC_Configuration(void);
+        void Delay(vu32 nCount);
+
+        enum spiSpeed { SPI_SLOW , SPI_MEDIUM , SPI_FAST };
+
+        static const uint16_t speeds [] = {
+        [ SPI_SLOW ] = SPI_BaudRatePrescaler_64 ,
+        [ SPI_MEDIUM ] = SPI_BaudRatePrescaler_8 ,
+        [ SPI_FAST ] = SPI_BaudRatePrescaler_2 };
+
+
+        //#define SPIx SPI1
+        #define SPIx_RCC RCC_APB2Periph_SPI1
+        #define SPI_GPIO_RCC RCC_APB2Periph_GPIOA
+        #define SPI_GPIO GPIOA
+        #define SPI_PIN_MOSI GPIO_Pin_7
+        #define SPI_PIN_MISO GPIO_Pin_6
+        #define SPI_PIN_SCK GPIO_Pin_5
+        #define SPI_PIN_SS GPIO_Pin_4
+
+
+        void spiInit ( SPI_TypeDef *SPIx)
+        {
+            SPI_InitTypeDef SPI_InitStructure ;
+            GPIO_InitTypeDef GPIO_InitStructure ;
+            GPIO_StructInit (& GPIO_InitStructure );
+            SPI_StructInit (& SPI_InitStructure );
+            
+            // Step 1: Initialize SPI
+            RCC_APB2PeriphClockCmd(SPIx_RCC, ENABLE);
+            SPI_InitStructure.SPI_BaudRatePrescaler = SPI_BaudRatePrescaler_128;
+            SPI_InitStructure.SPI_CPHA = SPI_CPHA_1Edge;
+            SPI_InitStructure.SPI_CPOL = SPI_CPOL_Low;
+            SPI_InitStructure.SPI_DataSize = SPI_DataSize_8b;
+            SPI_InitStructure.SPI_Direction = SPI_Direction_2Lines_FullDuplex;
+            SPI_InitStructure.SPI_FirstBit = SPI_FirstBit_MSB;
+            SPI_InitStructure.SPI_Mode = SPI_Mode_Master;
+            SPI_InitStructure.SPI_NSS = SPI_NSS_Soft | SPI_NSSInternalSoft_Set;
+            SPI_Init(SPIx, &SPI_InitStructure);
+            SPI_Cmd(SPIx, ENABLE);
+
+            // Step 2: Initialize GPIO
+            RCC_APB2PeriphClockCmd(SPI_GPIO_RCC, ENABLE);
+            // GPIO pins for MOSI, MISO, and SCK (MISO IS WRONG - SHOULD BE INPUT )
+            GPIO_InitStructure.GPIO_Pin =  SPI_PIN_SCK | SPI_PIN_MOSI; //SPI_PIN_MISO
+            GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;
+            GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+            GPIO_Init(SPI_GPIO, &GPIO_InitStructure);
+            // GPIO pin for SS
+            GPIO_InitStructure.GPIO_Pin = SPI_PIN_SS;
+            GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
+            GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+            GPIO_Init(SPI_GPIO, &GPIO_InitStructure);
+
+            // keith was here to set MOSI as input pull up
+            GPIO_InitStructure.GPIO_Pin =  SPI_PIN_MISO; 
+            GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IPU;
+            GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+            GPIO_Init(SPI_GPIO, &GPIO_InitStructure);
+         
+            // Disable SPI slave device
+            SPIx_DisableSlave();
+
+
+        }
+
+
+        uint8_t SPIx_Transfer(SPI_TypeDef *SPIx, uint8_t data)
+        {
+            // Write data to be transmitted to the SPI data register
+            SPIx->DR = data;
+            // Wait until transmit complete
+            while (!(SPIx->SR & (SPI_FLAG_TXE)));
+            // Wait until receive complete
+            while (!(SPIx->SR & (SPI_FLAG_RXNE)));
+            // Wait until SPI is not busy anymore
+            while (SPIx->SR & (SPI_FLAG_BSY));
+            // Return received data from SPI data register
+            return SPIx->DR;
+        }
+         
+        void SPIx_EnableSlave()
+        {
+            GPIO_ResetBits(SPI_GPIO, SPI_PIN_SS);
+        }
+         
+        void SPIx_DisableSlave()
+        {
+            GPIO_SetBits(SPI_GPIO, SPI_PIN_SS);
+        }
+
+        /***************************/
+
+        uint8_t txbuf [4], rxbuf [4];
+        uint16_t txbuf16 [4], rxbuf16 [4];
+
+        int main(void)
+        {
+            #ifdef DEBUG
+              debug();
+            #endif
+            RCC_Configuration();
+            NVIC_Configuration();
+            //RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOC, ENABLE);
+
+            spiInit(SPI1);
+
+            int i, j;
+            uint8_t buffer = 0;
+
+            SPIx_EnableSlave();
+            buffer = SPIx_Transfer(SPI1 , 0xf0);
+            SPIx_DisableSlave();
+
+            SPIx_EnableSlave();
+            buffer = SPIx_Transfer(SPI1 , 0x0f);
+            SPIx_DisableSlave();
+
+            SPIx_EnableSlave();
+            buffer = SPIx_Transfer(SPI1 , 0x55);
+            SPIx_DisableSlave();
+
+        }//end main 
+
+
+
+        /*******************************************************************************/
+        void RCC_Configuration(void)
+        {
+          /* RCC system reset(for debug purpose) */
+          RCC_DeInit();
+
+          /* Enable HSE */
+          RCC_HSEConfig(RCC_HSE_ON);
+
+          /* Wait till HSE is ready */
+          HSEStartUpStatus = RCC_WaitForHSEStartUp();
+
+          if(HSEStartUpStatus == SUCCESS)
+          {
+            /* Enable Prefetch Buffer */
+            FLASH_PrefetchBufferCmd(FLASH_PrefetchBuffer_Enable);
+
+            /* Flash 2 wait state */
+            FLASH_SetLatency(FLASH_Latency_2);
+            
+            /* HCLK = SYSCLK */
+            RCC_HCLKConfig(RCC_SYSCLK_Div1); 
+          
+            /* PCLK2 = HCLK */
+            RCC_PCLK2Config(RCC_HCLK_Div1); 
+
+            /* PCLK1 = HCLK/2 */
+            RCC_PCLK1Config(RCC_HCLK_Div2);
+
+            /* PLLCLK = 8MHz * 9 = 72 MHz */
+            RCC_PLLConfig(RCC_PLLSource_HSE_Div1, RCC_PLLMul_9);
+
+            /* Enable PLL */ 
+            RCC_PLLCmd(ENABLE);
+
+            /* Wait till PLL is ready */
+            while(RCC_GetFlagStatus(RCC_FLAG_PLLRDY) == RESET)
+            {
             }
-        }
 
+            /* Select PLL as system clock source */
+            RCC_SYSCLKConfig(RCC_SYSCLKSource_PLLCLK);
 
-        /* Cleaning ADDR condition sequence. */
-        uint32_t reg32 = I2C_SR2(i2c);
-        (void) reg32; /* unused */
-
-        return 0;
-    }
-
-    uint8_t i2c_write(uint32_t i2c, uint8_t address, uint8_t reg,
-        uint8_t data)
-    {
-        i2c_start(i2c, address, I2C_WRITE);
-
-        i2c_send_data(i2c, reg);
-
-        while (!(I2C_SR1(i2c) & (I2C_SR1_BTF)));
-        i2c_send_data(i2c, data);
-
-        while (!(I2C_SR1(i2c) & (I2C_SR1_BTF)));
-
-        i2c_send_stop(i2c);
-
-        return 0;
-    }
-
-    int i2c_read(uint32_t i2c, uint8_t address, uint8_t reg)
-    {
-        uint32_t timeout = 20000;
-        while ((I2C_SR2(i2c) & I2C_SR2_BUSY));  
-
-        if (i2c_start(i2c, address, I2C_WRITE)) {
-            return 0;
-        }
-        i2c_send_data(i2c, reg);
-
-        timeout = 20000;
-        while (!(I2C_SR1(i2c) & (I2C_SR1_BTF))) {
-            if (timeout > 0) {
-                timeout--;
-            } else {
-                return -1;
+            /* Wait till PLL is used as system clock source */
+            while(RCC_GetSYSCLKSource() != 0x08)
+            {
             }
+          }
         }
 
-        i2c_start(i2c, address, I2C_READ);
+        /**************************/
 
-        i2c_send_stop(i2c);
-
-        while (!(I2C_SR1(i2c) & I2C_SR1_RxNE));
-
-        int result = (int)i2c_get_data(i2c);
-
-        I2C_SR1(i2c) &= ~I2C_SR1_AF;
-        msleep(50);
-        i2c_send_stop(i2c);
-
-        return result;
-    }
-    </pre>
-
-    i2c.h
-    <pre>
-    #ifndef __I2C_H
-    #define __I2C_H
-
-    #define I2C_CR2_FREQ_MASK   0x3ff
-    #define I2C_CCR_CCRMASK 0xfff
-    #define I2C_TRISE_MASK  0x3f
-
-    void i2c_init(void);
-    void i2c_deinit(void);
-    uint8_t i2c_write(uint32_t i2c, uint8_t address, uint8_t reg,
-        uint8_t data);
-    int i2c_read(uint32_t i2c, uint8_t address, uint8_t reg);
-
-
-    #endif
-    </pre>
-
-    main.c
-    <pre>
-    #include <stdint.h>
-    #include <stdio.h>
-    #include <libopencm3/stm32/rcc.h>
-    #include <libopencm3/stm32/gpio.h>
-    #include <libopencm3/stm32/usart.h>
-    #include <libopencm3/stm32/i2c.h>
-
-    #include "i2c.h"
-
-    int main(void)
-    {
-        i2c_init();
-        while(1){
-            //i2c_write(uint32_t i2c, uint8_t address, uint8_t reg, uint8_t data)
-            i2c_write(I2C3, 0x55, 0x55, 0x55);
-        }
-        return 0;
-    }
-    </pre>
-
-
-    <b>SPI example with 1bitsy</b>
-    
-    <pre>
-        <code class="C++">
-
-        #include "../common/button_boot.h"
-
-        #include <libopencm3/stm32/rcc.h>
-        #include <libopencm3/stm32/gpio.h>
-
-        #include <libopencm3/stm32/spi.h>
-
-
-        #include "klspi.h"
-
-        /*
-
-           inspired by  :
-           https://github.com/ericherman/stm32f4-discovery-example
-
-        */
-
-
-        static void setup_spi(void)
+        void NVIC_Configuration(void)
         {
-            /* chip select */
-            gpio_mode_setup(GPIOE, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, GPIO3);
-            /* set to high which is not-selected */
-            gpio_set(GPIOE, GPIO3);
+        #ifdef  VECT_TAB_RAM  
+          /* Set the Vector Table base location at 0x20000000 */ 
+          NVIC_SetVectorTable(NVIC_VectTab_RAM, 0x0); 
+        #else  /* VECT_TAB_FLASH  */
+          /* Set the Vector Table base location at 0x08000000 */ 
+          NVIC_SetVectorTable(NVIC_VectTab_FLASH, 0x0);   
+        #endif
+        }
 
-            gpio_mode_setup(GPIOA, GPIO_MODE_AF, GPIO_PUPD_NONE,
-                    /* serial clock */
-                    GPIO5 |
-                    /* master in/slave out */
-                    GPIO6 |
-                    /* master out/slave in */
-                    GPIO7);
-            gpio_set_af(GPIOA, GPIO_AF5, GPIO5 | GPIO6 | GPIO7);
+        /**************************/
+        void Delay(vu32 nCount)
+        {
+          for(; nCount != 0; nCount--);
+        }
 
-            spi_disable_crc(SPI1);
-            spi_init_master(SPI1, SPI_CR1_BAUDRATE_FPCLK_DIV_32,
-                    /* high or low for the peripheral device */
-                    SPI_CR1_CPOL_CLK_TO_1_WHEN_IDLE,
-                    /* CPHA: Clock phase: read on rising edge of clock */
-                    SPI_CR1_CPHA_CLK_TRANSITION_2,
-                    /* DFF: Date frame format (8 or 16 bit) */
-                    SPI_CR1_DFF_8BIT,
-                    /* Most or Least Sig Bit First */
-                    SPI_CR1_MSBFIRST);
+        #ifdef  DEBUG
+        /**************************/
+        void assert_failed(u8* file, u32 line)
+        { 
+          /* User can add his own implementation to report the file name and line number,
+             ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
 
-            spi_enable_software_slave_management(SPI1);
-            spi_set_nss_high(SPI1);
+          /* Infinite loop */
+          while (1)
+          {
+          }
+        }
+        #endif
 
-            //spi_clear_mode_fault(SPI1);
+        </pre>
 
-            spi_enable(SPI1);
+        === STM32F103C8T6 UART example with STM32 standard peripheral library===
+        <pre>
+
+        #include "stm32f10x_lib.h"
+
+        GPIO_InitTypeDef GPIO_InitStructure;
+        ErrorStatus HSEStartUpStatus;
+
+        void RCC_Configuration(void);
+        void NVIC_Configuration(void);
+        void Delay(vu32 nCount);
+
+
+        /********************/
+        void led_toggle(void)
+        {
+            // Read LED output (GPIOA PIN8) status 
+            //keith sayz - probably not configured TO BE READ!?
+            uint8_t led_bit = GPIO_ReadOutputDataBit(GPIOC, GPIO_Pin_13);
+             
+            if(led_bit == (uint8_t)Bit_SET)
+            {
+                GPIO_SetBits(GPIOC, GPIO_Pin_13);
+            }else{
+                GPIO_ResetBits(GPIOC, GPIO_Pin_13);
+            }
+
+        }
+
+        /********************/
+
+        void USART1_Init(void)
+        {
+            // USART configuration structure for USART1 
+            USART_InitTypeDef usart1_init_struct;
+            // Bit configuration structure for GPIOA PIN9 and PIN10 
+            GPIO_InitTypeDef gpioa_init_struct;
+             
+            // Enalbe clock for USART1, AFIO and GPIOA
+            RCC_APB2PeriphClockCmd(RCC_APB2Periph_USART1 | RCC_APB2Periph_AFIO | 
+                                   RCC_APB2Periph_GPIOA, ENABLE);
+                                    
+            // GPIOA PIN9 alternative function Tx 
+            gpioa_init_struct.GPIO_Pin = GPIO_Pin_9;
+            gpioa_init_struct.GPIO_Speed = GPIO_Speed_50MHz;
+            gpioa_init_struct.GPIO_Mode = GPIO_Mode_AF_PP;
+            GPIO_Init(GPIOA, &gpioa_init_struct);
+
+            // GPIOA PIN9 alternative function Rx 
+            gpioa_init_struct.GPIO_Pin = GPIO_Pin_10;
+            gpioa_init_struct.GPIO_Speed = GPIO_Speed_50MHz;
+            gpioa_init_struct.GPIO_Mode = GPIO_Mode_IN_FLOATING;
+            GPIO_Init(GPIOA, &gpioa_init_struct);
+         
+            // Enable USART1 
+            USART_Cmd(USART1, ENABLE);  
+
+            // Baud rate 9600, 8-bit data, One stop bit
+            // No parity, Do both Rx and Tx, No HW flow control
+            usart1_init_struct.USART_BaudRate = 9600;   
+            usart1_init_struct.USART_WordLength = USART_WordLength_8b;  
+            usart1_init_struct.USART_StopBits = USART_StopBits_1;   
+            usart1_init_struct.USART_Parity = USART_Parity_No ;
+            usart1_init_struct.USART_Mode = USART_Mode_Rx | USART_Mode_Tx;
+            usart1_init_struct.USART_HardwareFlowControl = USART_HardwareFlowControl_None;
+            
+            // Configure USART1 
+            USART_Init(USART1, &usart1_init_struct);
         }
 
 
-        static void setup_main_clock(void)
-        {
-            rcc_clock_setup_hse_3v3(&rcc_hse_25mhz_3v3[RCC_CLOCK_3V3_168MHZ]);
-        }
-
-        static void setup_peripheral_clocks(void)
-        {
-            rcc_periph_clock_enable(RCC_GPIOA);
-            rcc_periph_clock_enable(RCC_GPIOD);
-            rcc_periph_clock_enable(RCC_GPIOE);
-            rcc_periph_clock_enable(RCC_OTGFS);
-            rcc_periph_clock_enable(RCC_SPI1);
-        }
-
-
-        static uint8_t send_command(uint16_t command, uint8_t data)
-        {
-            uint16_t return_value;
-            uint16_t ignore;
-
-            gpio_clear(GPIOE, GPIO3);
-            spi_send(SPI1, command);
-            ignore = spi_read(SPI1);
-            (void)ignore;
-            spi_send(SPI1, data);
-            return_value = spi_read(SPI1);
-            gpio_set(GPIOE, GPIO3);
-            return (uint8_t)return_value;
-        }
-
-        static uint8_t keith_test(uint8_t byte)
-        {
-            uint16_t command;
-            uint8_t data;
-
-            data = 0;
-
-            command =
-                /* READ bit */
-                (0x1 << 7) |
-                /* MS bit:  When 0 do not increment address */
-                (0x0 << 6) |
-                /* bits 2-7 are address */
-                (byte << 0);
-
-            return send_command(command, data);
+        //keith was here (Indiana book)
+        int putchar(int c){
+            while(USART_GetFlagStatus(USART1, USART_FLAG_TXE) == RESET){}
+            USART1->DR = (c & 0xff);
+            return 0; 
         }
 
 
         int main(void)
         {
-            int i;
-
-            button_boot(); // does not appear to work 
-            
-            setup_main_clock();
-            setup_peripheral_clocks();
-
-            setup_spi();
-         
-            while (1) {
-                
-                uint8_t my_data =  keith_test(0xaa);
-
-                for (i = 0; i < 5; i++) {   /* Wait a bit. */
-                    __asm__("nop");
-                }
-
-            }
-
-            return 0;
-        }
-        </code>
-    </pre>
-
-
-    <h2>USART ECHO STM32L152C DISCO (modified libopencm3 usart demo)</h2>
-
-    USE PINS:
-    PA2 = TX 
-    PA3 = RX
-
-    <pre>
-        <code class="c">        
-            #include <libopencm3/stm32/rcc.h>
-            #include <libopencm3/stm32/gpio.h>
-            #include <libopencm3/stm32/usart.h>
-
-            static void clock_setup(void)
-            {
-                /* Enable GPIOD clock for LED & USARTs. */
-                rcc_periph_clock_enable(RCC_GPIOA);
-                rcc_periph_clock_enable(RCC_GPIOB);
-
-                /* Enable clocks for USART2. */
-                rcc_periph_clock_enable(RCC_USART2);
-            }
-
-
-            static void usart_setup(void)
-            {
-                /* Setup USART2 parameters. */
-                usart_set_baudrate(USART2, 38400);
-                usart_set_databits(USART2, 8);
-                usart_set_stopbits(USART2, USART_STOPBITS_1);
-
-                usart_set_mode(USART2, USART_MODE_TX_RX ); //USART_MODE_TX
-
-                usart_set_parity(USART2, USART_PARITY_NONE);
-                usart_set_flow_control(USART2, USART_FLOWCONTROL_NONE);
-
-                /* Finally enable the USART. */
-                usart_enable(USART2);
-            }
-
-            static void gpio_setup(void)
-            {
-                /* Setup GPIO pin GPIO7 on GPIO port B for Green LED. */
-                gpio_mode_setup(GPIOB, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, GPIO7);
-
-                /* Setup GPIO pins for USART2 TX/RX. */
-                gpio_mode_setup(GPIOA, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO2); //TX
-                gpio_mode_setup(GPIOA, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO3); //RX
-
-                /* Setup USART2 TX/RX pin as alternate function. */
-                gpio_set_af(GPIOA, GPIO_AF7, GPIO2); //TX
-                gpio_set_af(GPIOA, GPIO_AF7, GPIO3); //RX
-
-            }
-
-            int main(void)
-            {
-                int i, j = 0, c = 0;
-
-                clock_setup();
-                gpio_setup();
-                usart_setup();
-
-                /* Blink the LED (PD12) on the board with every byte. */
-                while (1) {
-                    gpio_toggle(GPIOB, GPIO7); /* LED on/off */
-                    char ch = 0;
-
-                    ch = usart_recv_blocking(USART2);  
-                    usart_send_blocking(USART2, ch) ;
-
-                    for (i = 0; i < 100000; i++) { /* Wait a bit. */
-                        __asm__("NOP");
-                    }
-                }
-
-                return 0;
-            }
-        </code>
-    </pre>
-
-
-    ===<b>with STM32 standard library</b>===
-
-    Makefile
-    <pre>
-
-    #TO SEE ASSEMBLY FILES 
-    #COMPILE_OPTS = -c -save-temps -mcpu=cortex-m3 -mthumb -Wall -g -O0 
-
-    #NORMAL COMPILE 
-    COMPILE_OPTS = -mcpu=cortex-m3 -mthumb -Wall -g -ggdb -O0
-
-    ####################
-
-
-    INCLUDE_DIRS = -I . -I lib/inc
-    LIBRARY_DIRS = -L lib
-
-    CC = arm-none-eabi-gcc
-    CFLAGS = $(COMPILE_OPTS) $(INCLUDE_DIRS)
-
-    CXX = arm-none-eabi-g++
-    CXXFLAGS = $(COMPILE_OPTS) $(INCLUDE_DIRS)
-
-    AS = arm-none-eabi-gcc
-    ASFLAGS = $(COMPILE_OPTS) -c
-
-    LD = arm-none-eabi-gcc
-    LDFLAGS = -Wl,--gc-sections,-Map=$@.map,-cref,-u,Reset_Handler $(INCLUDE_DIRS) $(LIBRARY_DIRS) -T stm32.ld
-
-    OBJCP = arm-none-eabi-objcopy
-    OBJCPFLAGS = -O binary
-
-    AR = arm-none-eabi-ar
-    ARFLAGS = cr
-
-    MAIN_OUT = main
-    MAIN_OUT_ELF = $(MAIN_OUT).elf
-    MAIN_OUT_BIN = $(MAIN_OUT).bin
-
-    # all
-    all: $(MAIN_OUT_ELF) $(MAIN_OUT_BIN)
-
-    # main
-    $(MAIN_OUT_ELF): main.o stm32f10x_it.o lib/libstm32.a
-        $(LD) $(LDFLAGS) main.o stm32f10x_it.o lib/libstm32.a --output $@
-
-    $(MAIN_OUT_BIN): $(MAIN_OUT_ELF)
-        $(OBJCP) $(OBJCPFLAGS) $< $@
-
-
-    # flash
-    flash: all
-        openocd -f jtag/openocd.cfg -c "program main.bin 0x08000000 verify reset exit"
-
-
-    # libstm32.a
-    LIBSTM32_OUT = lib/libstm32.a
-
-    LIBSTM32_OBJS = \
-     lib/src/stm32f10x_adc.o \
-     lib/src/stm32f10x_bkp.o \
-     lib/src/stm32f10x_can.o \
-     lib/src/stm32f10x_dma.o \
-     lib/src/stm32f10x_exti.o \
-     lib/src/stm32f10x_flash.o \
-     lib/src/stm32f10x_gpio.o \
-     lib/src/stm32f10x_i2c.o \
-     lib/src/stm32f10x_iwdg.o \
-     lib/src/stm32f10x_lib.o \
-     lib/src/stm32f10x_nvic.o \
-     lib/src/stm32f10x_pwr.o \
-     lib/src/stm32f10x_rcc.o \
-     lib/src/stm32f10x_rtc.o \
-     lib/src/stm32f10x_spi.o \
-     lib/src/stm32f10x_systick.o \
-     lib/src/stm32f10x_tim.o \
-     lib/src/stm32f10x_tim1.o \
-     lib/src/stm32f10x_usart.o \
-     lib/src/stm32f10x_wwdg.o \
-     lib/src/cortexm3_macro.o \
-     lib/src/stm32f10x_vector.o
-
-    $(LIBSTM32_OUT): $(LIBSTM32_OBJS)
-        $(AR) $(ARFLAGS) $@ $(LIBSTM32_OBJS)
-
-    $(LIBSTM32_OBJS): stm32f10x_conf.h
-
-
-    clean:
-        -rm *.s *.i *.o lib/src/*.o $(LIBSTM32_OUT) $(MAIN_OUT_ELF) $(MAIN_OUT_BIN)
-
-    </pre>
-    === STM32F103C8T6 SPI example with STM32 standard peripheral library===
-    (not fully implemented )
-    <pre>
-    #include "stm32f10x_lib.h"
-
-    GPIO_InitTypeDef GPIO_InitStructure;
-    ErrorStatus HSEStartUpStatus;
-
-    void RCC_Configuration(void);
-    void NVIC_Configuration(void);
-    void Delay(vu32 nCount);
-
-    enum spiSpeed { SPI_SLOW , SPI_MEDIUM , SPI_FAST };
-
-    static const uint16_t speeds [] = {
-    [ SPI_SLOW ] = SPI_BaudRatePrescaler_64 ,
-    [ SPI_MEDIUM ] = SPI_BaudRatePrescaler_8 ,
-    [ SPI_FAST ] = SPI_BaudRatePrescaler_2 };
-
-
-    //#define SPIx SPI1
-    #define SPIx_RCC RCC_APB2Periph_SPI1
-    #define SPI_GPIO_RCC RCC_APB2Periph_GPIOA
-    #define SPI_GPIO GPIOA
-    #define SPI_PIN_MOSI GPIO_Pin_7
-    #define SPI_PIN_MISO GPIO_Pin_6
-    #define SPI_PIN_SCK GPIO_Pin_5
-    #define SPI_PIN_SS GPIO_Pin_4
-
-
-    void spiInit ( SPI_TypeDef *SPIx)
-    {
-        SPI_InitTypeDef SPI_InitStructure ;
-        GPIO_InitTypeDef GPIO_InitStructure ;
-        GPIO_StructInit (& GPIO_InitStructure );
-        SPI_StructInit (& SPI_InitStructure );
-        
-        // Step 1: Initialize SPI
-        RCC_APB2PeriphClockCmd(SPIx_RCC, ENABLE);
-        SPI_InitStructure.SPI_BaudRatePrescaler = SPI_BaudRatePrescaler_128;
-        SPI_InitStructure.SPI_CPHA = SPI_CPHA_1Edge;
-        SPI_InitStructure.SPI_CPOL = SPI_CPOL_Low;
-        SPI_InitStructure.SPI_DataSize = SPI_DataSize_8b;
-        SPI_InitStructure.SPI_Direction = SPI_Direction_2Lines_FullDuplex;
-        SPI_InitStructure.SPI_FirstBit = SPI_FirstBit_MSB;
-        SPI_InitStructure.SPI_Mode = SPI_Mode_Master;
-        SPI_InitStructure.SPI_NSS = SPI_NSS_Soft | SPI_NSSInternalSoft_Set;
-        SPI_Init(SPIx, &SPI_InitStructure);
-        SPI_Cmd(SPIx, ENABLE);
-
-        // Step 2: Initialize GPIO
-        RCC_APB2PeriphClockCmd(SPI_GPIO_RCC, ENABLE);
-        // GPIO pins for MOSI, MISO, and SCK (MISO IS WRONG - SHOULD BE INPUT )
-        GPIO_InitStructure.GPIO_Pin =  SPI_PIN_SCK | SPI_PIN_MOSI; //SPI_PIN_MISO
-        GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;
-        GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
-        GPIO_Init(SPI_GPIO, &GPIO_InitStructure);
-        // GPIO pin for SS
-        GPIO_InitStructure.GPIO_Pin = SPI_PIN_SS;
-        GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
-        GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
-        GPIO_Init(SPI_GPIO, &GPIO_InitStructure);
-
-        // keith was here to set MOSI as input pull up
-        GPIO_InitStructure.GPIO_Pin =  SPI_PIN_MISO; 
-        GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IPU;
-        GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
-        GPIO_Init(SPI_GPIO, &GPIO_InitStructure);
-     
-        // Disable SPI slave device
-        SPIx_DisableSlave();
-
-
-    }
-
-
-    uint8_t SPIx_Transfer(SPI_TypeDef *SPIx, uint8_t data)
-    {
-        // Write data to be transmitted to the SPI data register
-        SPIx->DR = data;
-        // Wait until transmit complete
-        while (!(SPIx->SR & (SPI_FLAG_TXE)));
-        // Wait until receive complete
-        while (!(SPIx->SR & (SPI_FLAG_RXNE)));
-        // Wait until SPI is not busy anymore
-        while (SPIx->SR & (SPI_FLAG_BSY));
-        // Return received data from SPI data register
-        return SPIx->DR;
-    }
-     
-    void SPIx_EnableSlave()
-    {
-        GPIO_ResetBits(SPI_GPIO, SPI_PIN_SS);
-    }
-     
-    void SPIx_DisableSlave()
-    {
-        GPIO_SetBits(SPI_GPIO, SPI_PIN_SS);
-    }
-
-    /***************************/
-
-    uint8_t txbuf [4], rxbuf [4];
-    uint16_t txbuf16 [4], rxbuf16 [4];
-
-    int main(void)
-    {
         #ifdef DEBUG
           debug();
         #endif
-        RCC_Configuration();
-        NVIC_Configuration();
-        //RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOC, ENABLE);
 
-        spiInit(SPI1);
+          /* Configure the system clocks */
+          RCC_Configuration();
+            
+          /* NVIC Configuration */
+          NVIC_Configuration();
 
-        int i, j;
-        uint8_t buffer = 0;
-
-        SPIx_EnableSlave();
-        buffer = SPIx_Transfer(SPI1 , 0xf0);
-        SPIx_DisableSlave();
-
-        SPIx_EnableSlave();
-        buffer = SPIx_Transfer(SPI1 , 0x0f);
-        SPIx_DisableSlave();
-
-        SPIx_EnableSlave();
-        buffer = SPIx_Transfer(SPI1 , 0x55);
-        SPIx_DisableSlave();
-
-    }//end main 
+          RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOC, ENABLE); //GPIO clock  
+          RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA, ENABLE); //keith was here 
 
 
+          // Configure PC.4 as Output push-pull 
+          GPIO_InitStructure.GPIO_Pin = GPIO_Pin_13;
+          GPIO_InitStructure.GPIO_Speed = GPIO_Speed_10MHz;
+          GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
+          GPIO_Init(GPIOC, &GPIO_InitStructure);
 
-    /*******************************************************************************/
-    void RCC_Configuration(void)
-    {
-      /* RCC system reset(for debug purpose) */
-      RCC_DeInit();
+          // keith was here 
+          GPIO_InitStructure.GPIO_Pin = GPIO_Pin_3;
+          GPIO_InitStructure.GPIO_Speed = GPIO_Speed_10MHz;
+          GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
+          GPIO_Init(GPIOA, &GPIO_InitStructure);
 
-      /* Enable HSE */
-      RCC_HSEConfig(RCC_HSE_ON);
 
-      /* Wait till HSE is ready */
-      HSEStartUpStatus = RCC_WaitForHSEStartUp();
+          USART1_Init();
 
-      if(HSEStartUpStatus == SUCCESS)
-      {
-        /* Enable Prefetch Buffer */
-        FLASH_PrefetchBufferCmd(FLASH_PrefetchBuffer_Enable);
+          while (1)
+          {
 
-        /* Flash 2 wait state */
-        FLASH_SetLatency(FLASH_Latency_2);
-        
-        /* HCLK = SYSCLK */
-        RCC_HCLKConfig(RCC_SYSCLK_Div1); 
-      
-        /* PCLK2 = HCLK */
-        RCC_PCLK2Config(RCC_HCLK_Div1); 
+              putchar(0xaa);
+              putchar(0x55);
+              putchar(0xf0);
+              putchar(0x0f);
 
-        /* PCLK1 = HCLK/2 */
-        RCC_PCLK1Config(RCC_HCLK_Div2);
+          }
 
-        /* PLLCLK = 8MHz * 9 = 72 MHz */
-        RCC_PLLConfig(RCC_PLLSource_HSE_Div1, RCC_PLLMul_9);
-
-        /* Enable PLL */ 
-        RCC_PLLCmd(ENABLE);
-
-        /* Wait till PLL is ready */
-        while(RCC_GetFlagStatus(RCC_FLAG_PLLRDY) == RESET)
-        {
         }
 
-        /* Select PLL as system clock source */
-        RCC_SYSCLKConfig(RCC_SYSCLKSource_PLLCLK);
-
-        /* Wait till PLL is used as system clock source */
-        while(RCC_GetSYSCLKSource() != 0x08)
+        /********************/
+        void RCC_Configuration(void)
         {
-        }
-      }
-    }
+          /* RCC system reset(for debug purpose) */
+          RCC_DeInit();
 
-    /**************************/
+          /* Enable HSE */
+          RCC_HSEConfig(RCC_HSE_ON);
 
-    void NVIC_Configuration(void)
-    {
-    #ifdef  VECT_TAB_RAM  
-      /* Set the Vector Table base location at 0x20000000 */ 
-      NVIC_SetVectorTable(NVIC_VectTab_RAM, 0x0); 
-    #else  /* VECT_TAB_FLASH  */
-      /* Set the Vector Table base location at 0x08000000 */ 
-      NVIC_SetVectorTable(NVIC_VectTab_FLASH, 0x0);   
-    #endif
-    }
+          /* Wait till HSE is ready */
+          HSEStartUpStatus = RCC_WaitForHSEStartUp();
 
-    /**************************/
-    void Delay(vu32 nCount)
-    {
-      for(; nCount != 0; nCount--);
-    }
+          if(HSEStartUpStatus == SUCCESS)
+          {
+            /* Enable Prefetch Buffer */
+            FLASH_PrefetchBufferCmd(FLASH_PrefetchBuffer_Enable);
 
-    #ifdef  DEBUG
-    /**************************/
-    void assert_failed(u8* file, u32 line)
-    { 
-      /* User can add his own implementation to report the file name and line number,
-         ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
+            /* Flash 2 wait state */
+            FLASH_SetLatency(FLASH_Latency_2);
+            
+            /* HCLK = SYSCLK */
+            RCC_HCLKConfig(RCC_SYSCLK_Div1); 
+          
+            /* PCLK2 = HCLK */
+            RCC_PCLK2Config(RCC_HCLK_Div1); 
 
-      /* Infinite loop */
-      while (1)
-      {
-      }
-    }
-    #endif
+            /* PCLK1 = HCLK/2 */
+            RCC_PCLK1Config(RCC_HCLK_Div2);
 
-    </pre>
+            /* PLLCLK = 8MHz * 9 = 72 MHz */
+            RCC_PLLConfig(RCC_PLLSource_HSE_Div1, RCC_PLLMul_9);
 
-    === STM32F103C8T6 UART example with STM32 standard peripheral library===
-    <pre>
+            /* Enable PLL */ 
+            RCC_PLLCmd(ENABLE);
 
-    #include "stm32f10x_lib.h"
+            /* Wait till PLL is ready */
+            while(RCC_GetFlagStatus(RCC_FLAG_PLLRDY) == RESET)
+            {
+            }
 
-    GPIO_InitTypeDef GPIO_InitStructure;
-    ErrorStatus HSEStartUpStatus;
+            /* Select PLL as system clock source */
+            RCC_SYSCLKConfig(RCC_SYSCLKSource_PLLCLK);
 
-    void RCC_Configuration(void);
-    void NVIC_Configuration(void);
-    void Delay(vu32 nCount);
-
-
-    /********************/
-    void led_toggle(void)
-    {
-        // Read LED output (GPIOA PIN8) status 
-        //keith sayz - probably not configured TO BE READ!?
-        uint8_t led_bit = GPIO_ReadOutputDataBit(GPIOC, GPIO_Pin_13);
-         
-        if(led_bit == (uint8_t)Bit_SET)
-        {
-            GPIO_SetBits(GPIOC, GPIO_Pin_13);
-        }else{
-            GPIO_ResetBits(GPIOC, GPIO_Pin_13);
+            /* Wait till PLL is used as system clock source */
+            while(RCC_GetSYSCLKSource() != 0x08)
+            {
+            }
+          }
         }
 
-    }
-
-    /********************/
-
-    void USART1_Init(void)
-    {
-        // USART configuration structure for USART1 
-        USART_InitTypeDef usart1_init_struct;
-        // Bit configuration structure for GPIOA PIN9 and PIN10 
-        GPIO_InitTypeDef gpioa_init_struct;
-         
-        // Enalbe clock for USART1, AFIO and GPIOA
-        RCC_APB2PeriphClockCmd(RCC_APB2Periph_USART1 | RCC_APB2Periph_AFIO | 
-                               RCC_APB2Periph_GPIOA, ENABLE);
-                                
-        // GPIOA PIN9 alternative function Tx 
-        gpioa_init_struct.GPIO_Pin = GPIO_Pin_9;
-        gpioa_init_struct.GPIO_Speed = GPIO_Speed_50MHz;
-        gpioa_init_struct.GPIO_Mode = GPIO_Mode_AF_PP;
-        GPIO_Init(GPIOA, &gpioa_init_struct);
-
-        // GPIOA PIN9 alternative function Rx 
-        gpioa_init_struct.GPIO_Pin = GPIO_Pin_10;
-        gpioa_init_struct.GPIO_Speed = GPIO_Speed_50MHz;
-        gpioa_init_struct.GPIO_Mode = GPIO_Mode_IN_FLOATING;
-        GPIO_Init(GPIOA, &gpioa_init_struct);
-     
-        // Enable USART1 
-        USART_Cmd(USART1, ENABLE);  
-
-        // Baud rate 9600, 8-bit data, One stop bit
-        // No parity, Do both Rx and Tx, No HW flow control
-        usart1_init_struct.USART_BaudRate = 9600;   
-        usart1_init_struct.USART_WordLength = USART_WordLength_8b;  
-        usart1_init_struct.USART_StopBits = USART_StopBits_1;   
-        usart1_init_struct.USART_Parity = USART_Parity_No ;
-        usart1_init_struct.USART_Mode = USART_Mode_Rx | USART_Mode_Tx;
-        usart1_init_struct.USART_HardwareFlowControl = USART_HardwareFlowControl_None;
-        
-        // Configure USART1 
-        USART_Init(USART1, &usart1_init_struct);
-    }
-
-
-    //keith was here (Indiana book)
-    int putchar(int c){
-        while(USART_GetFlagStatus(USART1, USART_FLAG_TXE) == RESET){}
-        USART1->DR = (c & 0xff);
-        return 0; 
-    }
-
-
-    int main(void)
-    {
-    #ifdef DEBUG
-      debug();
-    #endif
-
-      /* Configure the system clocks */
-      RCC_Configuration();
-        
-      /* NVIC Configuration */
-      NVIC_Configuration();
-
-      RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOC, ENABLE); //GPIO clock  
-      RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA, ENABLE); //keith was here 
-
-
-      // Configure PC.4 as Output push-pull 
-      GPIO_InitStructure.GPIO_Pin = GPIO_Pin_13;
-      GPIO_InitStructure.GPIO_Speed = GPIO_Speed_10MHz;
-      GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
-      GPIO_Init(GPIOC, &GPIO_InitStructure);
-
-      // keith was here 
-      GPIO_InitStructure.GPIO_Pin = GPIO_Pin_3;
-      GPIO_InitStructure.GPIO_Speed = GPIO_Speed_10MHz;
-      GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
-      GPIO_Init(GPIOA, &GPIO_InitStructure);
-
-
-      USART1_Init();
-
-      while (1)
-      {
-
-          putchar(0xaa);
-          putchar(0x55);
-          putchar(0xf0);
-          putchar(0x0f);
-
-      }
-
-    }
-
-    /********************/
-    void RCC_Configuration(void)
-    {
-      /* RCC system reset(for debug purpose) */
-      RCC_DeInit();
-
-      /* Enable HSE */
-      RCC_HSEConfig(RCC_HSE_ON);
-
-      /* Wait till HSE is ready */
-      HSEStartUpStatus = RCC_WaitForHSEStartUp();
-
-      if(HSEStartUpStatus == SUCCESS)
-      {
-        /* Enable Prefetch Buffer */
-        FLASH_PrefetchBufferCmd(FLASH_PrefetchBuffer_Enable);
-
-        /* Flash 2 wait state */
-        FLASH_SetLatency(FLASH_Latency_2);
-        
-        /* HCLK = SYSCLK */
-        RCC_HCLKConfig(RCC_SYSCLK_Div1); 
-      
-        /* PCLK2 = HCLK */
-        RCC_PCLK2Config(RCC_HCLK_Div1); 
-
-        /* PCLK1 = HCLK/2 */
-        RCC_PCLK1Config(RCC_HCLK_Div2);
-
-        /* PLLCLK = 8MHz * 9 = 72 MHz */
-        RCC_PLLConfig(RCC_PLLSource_HSE_Div1, RCC_PLLMul_9);
-
-        /* Enable PLL */ 
-        RCC_PLLCmd(ENABLE);
-
-        /* Wait till PLL is ready */
-        while(RCC_GetFlagStatus(RCC_FLAG_PLLRDY) == RESET)
+        /********************/
+        void NVIC_Configuration(void)
         {
+        #ifdef  VECT_TAB_RAM  
+          /* Set the Vector Table base location at 0x20000000 */ 
+          NVIC_SetVectorTable(NVIC_VectTab_RAM, 0x0); 
+        #else  /* VECT_TAB_FLASH  */
+          /* Set the Vector Table base location at 0x08000000 */ 
+          NVIC_SetVectorTable(NVIC_VectTab_FLASH, 0x0);   
+        #endif
         }
 
-        /* Select PLL as system clock source */
-        RCC_SYSCLKConfig(RCC_SYSCLKSource_PLLCLK);
-
-        /* Wait till PLL is used as system clock source */
-        while(RCC_GetSYSCLKSource() != 0x08)
+        /********************/
+        void Delay(vu32 nCount)
         {
+          for(; nCount != 0; nCount--);
         }
-      }
-    }
 
-    /********************/
-    void NVIC_Configuration(void)
-    {
-    #ifdef  VECT_TAB_RAM  
-      /* Set the Vector Table base location at 0x20000000 */ 
-      NVIC_SetVectorTable(NVIC_VectTab_RAM, 0x0); 
-    #else  /* VECT_TAB_FLASH  */
-      /* Set the Vector Table base location at 0x08000000 */ 
-      NVIC_SetVectorTable(NVIC_VectTab_FLASH, 0x0);   
-    #endif
-    }
+        #ifdef  DEBUG
+        /********************/
+        void assert_failed(u8* file, u32 line)
+        { 
+          while (1)
+          {
+          }
+        }
+        #endif
+        </pre>
 
-    /********************/
-    void Delay(vu32 nCount)
-    {
-      for(; nCount != 0; nCount--);
-    }
+        <b>LINKS </b>
 
-    #ifdef  DEBUG
-    /********************/
-    void assert_failed(u8* file, u32 line)
-    { 
-      while (1)
-      {
-      }
-    }
-    #endif
-    </pre>
+        <pre>
 
-    == <b>LINKS </b>==
+        //The best book I have found on STM32 - but be aware it teaches the STM32 standard firmware library.
+        http://www.cs.indiana.edu/~geobrown/book.pdf
 
-    <pre>
+        //good example of using openOCD 
+        https://gctechspace.org/2014/09/getting-to-blinky-with-the-stm32-and-ubuntu-linux/
 
-    //The best book I have found on STM32 - but be aware it teaches the STM32 standard firmware library.
-    http://www.cs.indiana.edu/~geobrown/book.pdf
+        //best "easy" tutorial on the STM32 architecture I have found 
+        http://hertaville.com/stm32f0-gpio-tutorial-part-1.html
 
-    //good example of using openOCD 
-    https://gctechspace.org/2014/09/getting-to-blinky-with-the-stm32-and-ubuntu-linux/
+        //more info but may be outdated, use at your own risk 
+        http://jeremyherbert.net/get/stm32f4_getting_started
 
-    //best "easy" tutorial on the STM32 architecture I have found 
-    http://hertaville.com/stm32f0-gpio-tutorial-part-1.html
+        </pre>
 
-    //more info but may be outdated, use at your own risk 
-    http://jeremyherbert.net/get/stm32f4_getting_started
-
-    </pre>
-
-
+   </body>
 </html>
