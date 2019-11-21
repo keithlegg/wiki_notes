@@ -1,2157 +1,2158 @@
-My adventures with the Mojo FPGA board. 
 
-Update December 2017. I finally have successfully programmed several other FPGAs!! See hardware section
+<!DOCTYPE html>
 
+<html lang="en">
 
+    <head>
+        <meta charset="utf-8"/>
+    </head>
 
+    <body style="background-color:#cccccc;">
+    My adventures with the Xilinx family of FPGAs. 
 
-__TOC__
+    </br>
 
+    <b>Getting started </b>
 
-see also: 
+    </br>
 
-[[verilog cookbook]]
+    <b> Who/What ?</b>
+    <pre>
+        I decided rather randomly one day to buy a Mojo back in 2013 from Adafruit.
 
-==<b>Getting started </b>==
+        The thing sat on my shelf for a year and I stared at it, afraid of its complexity and power. The good news is that you CAN start using it, it just takes a few days of really reading up on verilog (I have not used VHDL, looks harder).
 
-===new to FPGA?===
+        If you have an older Mojo board (I bought mine in 2013), You may have to solder an ISP on and flash newer firmware to the AVR chip. 
 
-https://www.sparkfun.com/news/1203
+        The learning curve on an FPGA is vertical, pretty much as complex as it gets. 
 
-https://www.youtube.com/watch?v=gUsHwi4M4xE
+        Before you can even think about FPGA, you need to know at least a little bit about logic circuits. (combinatorial vs sequential, blocking and non blocking, bitwise operations,  boolean logic (AND,OR,XOR,NOT,ETC)
+        You may be able to avoid the scarier topics like  propagation delay and metastability in the beginning. 
 
+        Once you have a few ideas how those work, the next obstacle is to install Xilinx ISE. Read the instructions line by line and do what it says.
+        After that is isn’t too bad to start messing around, the Mojo tutorials seem to be a pretty good start. 
 
-=== Who/What ?===
-<pre>
-I decided rather randomly one day to buy a Mojo back in 2013 from Adafruit.
+        My toolchain is simply ISE, sublime text,  and the "mojo-loader" on Ubuntu. 
 
-The thing sat on my shelf for a year and I stared at it, afraid of its complexity and power. The good news is that you CAN start using it, it just takes a few days of really reading up on verilog (I have not used VHDL, looks harder).
+        A bus pirate device is inexpensive and useful for sending data into the mojo and operates at 3V so you dont need to deal with logic buffering headaches. 
 
-If you have an older Mojo board (I bought mine in 2013), You may have to solder an ISP on and flash newer firmware to the AVR chip. 
+        I decided to not use the "Mojo IDE" or "lucid" because it is not an industry standard. It may well be a great thing, I wanted to stay closer to the metal so if I ever switch devices I wont be locked into a certain set of tools. 
 
-The learning curve on an FPGA is vertical, pretty much as complex as it gets. 
+        Once you can build a bin and flash it to the device, you are halfway to exploring the amazing world of FPGA.
 
-Before you can even think about FPGA, you need to know at least a little bit about logic circuits. (combinatorial vs sequential, blocking and non blocking, bitwise operations,  boolean logic (AND,OR,XOR,NOT,ETC)
-You may be able to avoid the scarier topics like  propagation delay and metastability in the beginning. 
+        I highly recommend Blaine Readler's "Verilog by example" as a place to start. It is a deceptively small book, but you will 
+        read it over and over and see new subtle complexities in every line of it. Read each page. Re read each page. It will begin to make sense after a day or two.
 
-Once you have a few ideas how those work, the next obstacle is to install Xilinx ISE. Read the instructions line by line and do what it says.
-After that is isn’t too bad to start messing around, the Mojo tutorials seem to be a pretty good start. 
+        The weirdest thing to get used to with Hardware languages, is that almost everything you know about programming is gone. The rules are different here.
+        The whole concept of "time" and "order of execution" is non existent. You have to build the order of execution, based on a clock signal and a register storing the value of a counter. 
 
-My toolchain is simply ISE, sublime text,  and the "mojo-loader" on Ubuntu. 
+        What your task designing FPGA basically becomes is describing a wiring diagram with words. There are two types of logic : combinatorial and sequential. Combinatorial is "real time" and has no ability to store state. Sequential is clocked by an external signal and can store data. Blocking and non blocking are also confusing.
 
-A bus pirate device is inexpensive and useful for sending data into the mojo and operates at 3V so you dont need to deal with logic buffering headaches. 
+        All you have to work with are many, many connections of latches. The only actual "time" is the input clock/signal pulse(s) and keeping a count of the numbers of cycles, and using signals to have different modules communicate state. 
+          
+        You can control what happens sequentially and what happens asynchronously, but all that is triggered by and dictated from the clock pulses.
 
-I decided to not use the "Mojo IDE" or "lucid" because it is not an industry standard. It may well be a great thing, I wanted to stay closer to the metal so if I ever switch devices I wont be locked into a certain set of tools. 
+        It is MASSIVELY parallel, and almost unlimited on what can be done once you learn the rules.
 
-Once you can build a bin and flash it to the device, you are halfway to exploring the amazing world of FPGA.
+    </pre>
 
-I highly recommend Blaine Readler's "Verilog by example" as a place to start. It is a deceptively small book, but you will 
-read it over and over and see new subtle complexities in every line of it. Read each page. Re read each page. It will begin to make sense after a day or two.
 
-The weirdest thing to get used to with Hardware languages, is that almost everything you know about programming is gone. The rules are different here.
-The whole concept of "time" and "order of execution" is non existent. You have to build the order of execution, based on a clock signal and a register storing the value of a counter. 
 
-What your task designing FPGA basically becomes is describing a wiring diagram with words. There are two types of logic : combinatorial and sequential. Combinatorial is "real time" and has no ability to store state. Sequential is clocked by an external signal and can store data. Blocking and non blocking are also confusing.
+    <b> example Mojo project </b>
 
-All you have to work with are many, many connections of latches. The only actual "time" is the input clock/signal pulse(s) and keeping a count of the numbers of cycles, and using signals to have different modules communicate state. 
-  
-You can control what happens sequentially and what happens asynchronously, but all that is triggered by and dictated from the clock pulses.
+    <pre>
+        git clone https://github.com/embmicro/mojo-base-project.git
+    </pre>
 
-It is MASSIVELY parallel, and almost unlimited on what can be done once you learn the rules.
 
-</pre>
+    <b>Fundamentals</b>
 
 
+    <b>Terminology</b>
+    from     : http://www.asic-world.com/verilog/
+    good read: https://en.wikipedia.org/wiki/Flip-flop_(electronics)
 
-<b> example Mojo project </b>
+    <pre>
+        Verilog       - Verifying Logic. There are at least three flavors. Verilog 95, Verilog 2001, and System Verilog. 
+        combinational - can not store a value, the result appears at the output "instantly", no state. 
+        Sequential    - sequential logic has memory, or state and can be clocked by other signals 
+        driver        - is a data type which can drive a load. 
+                        anything that electrons can move through/into
+        reg           - short for "register", a type of driver (can be sequential and combinational), use always blocks to set
+        wire          - type of driver for electrical pathway (only combinational) use assign statements to set 
 
-<pre>
-git clone https://github.com/embmicro/mojo-base-project.git
-</pre>
+        latch         - unclocked register?
+        SR flip flop  - set/reset -  the most fundamental latch is the simple SR latch  
+        D  flip flop - "data" or "delay", captures the value of the D-input at a definite portion of the clock cycle
+                        D is for "data", Q is for "quanta" , (from Turing - meaning output)   
+        JK            - SR latch that is made to toggle its output
+    </pre>
 
-==<b>Fundamentals</b>==
+    <pre>
+        integer     - procedural 
+        real        - procedural 
+        time        - procedural 
+         
+        assign      - short hand for always @*, combinationial logic for a WIRE, as opposed to an always for a register
+        always      - use to set REGISTERS, not wires
+        `define     - a global macro, of global scope. If you define in a module, it still stays declared after the module.
+                      macro that can be used to define any variable, function or expression under a name.
+                      define is global...so anything compiled will get the value
+        parameter   - local to a module. constants that are used to configure the behavior of a module when your code is synthesized
+                      used to declare constants which are not modified during runtime.
+        localparam  - same scope as ‘parameter’, but cannot be changed from outside.
+                      Unlike nonlocal parameters, local parameters can be declared in a generate block, package,
+                      class body, or compilation-unit scope.
+                      idea is to protect value from accidental or incorrect redefinition by an end-user
 
+    </pre>
 
-===Terminology===
-from     : http://www.asic-world.com/verilog/
-good read: https://en.wikipedia.org/wiki/Flip-flop_(electronics)
+    <b> data definition </b>
+    <pre>
+        each bit can actually be one of four values, 0, 1, x, or z
+        bit literals are of type  d, b, o, or h  - (decimal, binary, octal?, hex)
 
-<pre>
-Verilog       - Verifying Logic. There are at least three flavors. Verilog 95, Verilog 2001, and System Verilog. 
-combinational - can not store a value, the result appears at the output "instantly", no state. 
-Sequential    - sequential logic has memory, or state and can be clocked by other signals 
-driver        - is a data type which can drive a load. 
-                anything that electrons can move through/into
-reg           - short for "register", a type of driver (can be sequential and combinational), use always blocks to set
-wire          - type of driver for electrical pathway (only combinational) use assign statements to set 
+        io specification defaults to "wire", you have to say "reg" if not a wire
 
-latch         - unclocked register?
-SR flip flop  - set/reset -  the most fundamental latch is the simple SR latch  
-D  flip flop - "data" or "delay", captures the value of the D-input at a definite portion of the clock cycle
-                D is for "data", Q is for "quanta" , (from Turing - meaning output)   
-JK            - SR latch that is made to toggle its output
-</pre>
+    </pre>
 
-<pre>
-integer     - procedural 
-real        - procedural 
-time        - procedural 
- 
-assign      - short hand for always @*, combinationial logic for a WIRE, as opposed to an always for a register
-always      - use to set REGISTERS, not wires
-`define     - a global macro, of global scope. If you define in a module, it still stays declared after the module.
-              macro that can be used to define any variable, function or expression under a name.
-              define is global...so anything compiled will get the value
-parameter   - local to a module. constants that are used to configure the behavior of a module when your code is synthesized
-              used to declare constants which are not modified during runtime.
-localparam  - same scope as ‘parameter’, but cannot be changed from outside.
-              Unlike nonlocal parameters, local parameters can be declared in a generate block, package,
-              class body, or compilation-unit scope.
-              idea is to protect value from accidental or incorrect redefinition by an end-user
+    <pre>
+        there is not always verification that your busses match the right number of outputs,
+        for example, this will work:
 
-</pre>
+        assign led[7:0] = 8'b110110; 
+        ... but notice we only supplied 6 bits for a byte. The other two fall back on previous definition for value.
+    </pre>
 
-=== data definition ===
-<pre>
-each bit can actually be one of four values, 0, 1, x, or z
-bit literals are of type  d, b, o, or h  - (decimal, binary, octal?, hex)
 
-io specification defaults to "wire", you have to say "reg" if not a wire
+    it is really confusing to differentiate a register and a wire. Here are some basics:
 
-</pre>
 
-<pre>
-there is not always verification that your busses match the right number of outputs,
-for example, this will work:
+    <b> Verilog concepts </b>
 
-assign led[7:0] = 8'b110110; 
-... but notice we only supplied 6 bits for a byte. The other two fall back on previous definition for value.
-</pre>
+    <b>Wire Vs Reg</b>
+    
+    <b>WIRES</b>
 
+    <pre>
+        Wires are used for connecting different elements. They can be treated as physical wires. 
 
-it is really confusing to differentiate a register and a wire. Here are some basics:
+        must be driven by something, and cannot store a value without being driven, nor initialized to a value.
 
-==<b> Verilog concepts </b>==
+        They can be read or assigned. No values get stored in them. 
 
-===Wire Vs Reg===
-<b>WIRES</b>
-<pre>
-Wires are used for connecting different elements. They can be treated as physical wires. 
+        They need to be driven by either continuous assign statement or from a port of a module.
 
-must be driven by something, and cannot store a value without being driven, nor initialized to a value.
+        used to connect input and output ports of a module instantiation together with other elements
 
-They can be read or assigned. No values get stored in them. 
+        used as inputs and outputs within an actual module declaration.
 
-They need to be driven by either continuous assign statement or from a port of a module.
+        cannot be used as the left-hand side of an = or <= sign in an always@ block.
 
-used to connect input and output ports of a module instantiation together with other elements
+        the only legal type on the left-hand side of an assign statement.
 
-used as inputs and outputs within an actual module declaration.
+        stateless way of connecting two pieces in a Verilog-based design.
 
-cannot be used as the left-hand side of an = or <= sign in an always@ block.
+        elements can only be used to model combinational logic.
+        Neither "blocking" nor "non blocking" thought of as "continuous"
+    </pre>
 
-the only legal type on the left-hand side of an assign statement.
+    <b>REG</b>
+    <pre>
+        Don't necessarily correspond to physical registers. 
 
-stateless way of connecting two pieces in a Verilog-based design.
+        They represent data storage elements. They retain their value until next value is assigned to them 
 
-elements can only be used to model combinational logic.
-Neither "blocking" nor "non blocking" thought of as "continuous"
-</pre>
+        They can be synthesized to FF, latch or combinatorial circuit.(They might not be synthesizable !!!)
 
-<b>REG</b>
-<pre>
-Don't necessarily correspond to physical registers. 
+        put inside always block, not in assign statement.
 
-They represent data storage elements. They retain their value until next value is assigned to them 
+        is the only legal type on the left-hand side of an always@ block = or <= sign.
 
-They can be synthesized to FF, latch or combinatorial circuit.(They might not be synthesizable !!!)
+        is the only legal type on the left-hand side of an initial block = sign (used in Test Benches).
 
-put inside always block, not in assign statement.
+        cannot be used on the left-hand side of an assign statement.
 
-is the only legal type on the left-hand side of an always@ block = or <= sign.
+        can be used for modelling both combinational and sequential logic - Via sensitivity list and blocking/non blocking assign
 
-is the only legal type on the left-hand side of an initial block = sign (used in Test Benches).
+        can be connected to the input port of a module instantiation.
 
-cannot be used on the left-hand side of an assign statement.
+        can be used as outputs within module declaration -
 
-can be used for modelling both combinational and sequential logic - Via sensitivity list and blocking/non blocking assign
+        cannot be used as inputs within module declaration.
 
-can be connected to the input port of a module instantiation.
+        can be used to create registers when used in conjunction with always@(posedge Clock) blocks.
 
-can be used as outputs within module declaration -
+        can be used to create both combinational and sequential logic.
+    </pre>
 
-cannot be used as inputs within module declaration.
+    <b>Blocking vs Non blocking assignment</b>
 
-can be used to create registers when used in conjunction with always@(posedge Clock) blocks.
+    Blocking means opposite of what you might think. Blocking means EACH LINE executes sequentially, one after the next, and assigns the value of its result when the procedural block (always, etc) is finished.
 
-can be used to create both combinational and sequential logic.
-</pre>
+    a blocking statement must be executed BEFORE the execution of the statements that follow it in a sequential block.
 
-===Blocking vs Non blocking assignment===
+    a nonblocking procedural statement can be used when you want to make several register assignments within the same time step without regard to order or dependence upon each other. 
 
-Blocking means opposite of what you might think. Blocking means EACH LINE executes sequentially, one after the next, and assigns the value of its result when the procedural block (always, etc) is finished.
+    If you only have one statement in a procedural block, it doesn't matter if it's blocking or non-blocking.
 
-a blocking statement must be executed BEFORE the execution of the statements that follow it in a sequential block.
+    Remember that everything operates in parallel, but you can control the sequence of what fires when to some degree. A good pattern seems to be a module containing one blocking for the LOGIC, and a non blocking for the ASSIGNS of the logc happening, like a Q of a latch, etc. See the Mojo SPI module for an example of this.
 
-a nonblocking procedural statement can be used when you want to make several register assignments within the same time step without regard to order or dependence upon each other. 
 
-If you only have one statement in a procedural block, it doesn't matter if it's blocking or non-blocking.
+    sequential
+    <pre>
+        output depends not only on the present value of its input signals but on the sequence of past inputs
+        uses flip flops. Unlike combinational logic, sequential circuits have state
+        made of combinational circuits with the additional properties of storage (to remember past inputs) and feedback.
+        basically, sequential circuits have memory. 
+    </pre>
 
-Remember that everything operates in parallel, but you can control the sequence of what fires when to some degree. A good pattern seems to be a module containing one blocking for the LOGIC, and a non blocking for the ASSIGNS of the logc happening, like a Q of a latch, etc. See the Mojo SPI module for an example of this.
+    Combinational
+    <pre>
+        The output is a pure function of the present input only.
+        Combinational logic circuits implement Boolean functions. Boolean functions are mappings of input to output. 
+        These circuits are functions of input only. 
+    </pre>
 
 
-sequential
-<pre>
-output depends not only on the present value of its input signals but on the sequence of past inputs
-uses flip flops. Unlike combinational logic, sequential circuits have state
-made of combinational circuits with the additional properties of storage (to remember past inputs) and feedback.
-basically, sequential circuits have memory. 
-</pre>
+    Blocking (in always) 
+    <pre>
+        = operator 
+        Blocking executes "in series" because a blocking assignment blocks execution of the next STATEMENT until it completes.
+        the results of the next statement may depend on the first one being completed.
+        use blocking for SEQUENTIAL always blocks (as in the BLOCKS execute sequentially vs commands) 
+        The whole statement is done before control passes on to the next statement.
+        Do not mix blocking and nonblocking in single always block.
+    </pre>
 
-Combinational
-<pre>
-The output is a pure function of the present input only.
-Combinational logic circuits implement Boolean functions. Boolean functions are mappings of input to output. 
-These circuits are functions of input only. 
-</pre>
+    Non Blocking (in always)  
+    <pre>
+        <= operator 
+        Non-blocking assignment executes "in parallel" because it describes assignments that all occur at the SAME TIME. 
+        The result of a statement on the 2nd line will/may not depend on the results of the statement on the 1st line. 
+        use non blocking for COMBINATIONAL always blocks (as in each statement executes immediately before the BLOCK is done)
+        all assignments deferred until all right-hand sides have been evaluated 
+        evaluates the WHOLE ALWAYS BLOCK before making the left handed assigns.
+        Do not mix blocking and nonblocking in single always block.
+    </pre>
 
 
-Blocking (in always) 
-<pre>
-= operator 
-Blocking executes "in series" because a blocking assignment blocks execution of the next STATEMENT until it completes.
-the results of the next statement may depend on the first one being completed.
-use blocking for SEQUENTIAL always blocks (as in the BLOCKS execute sequentially vs commands) 
-The whole statement is done before control passes on to the next statement.
-Do not mix blocking and nonblocking in single always block.
-</pre>
+    Infinite loops - Beware
+    <pre>
+        For sequential blocks the blocking statements ends up in a infinite loop 
+        In synthesis they end up in the latches..
 
-Non Blocking (in always)  
-<pre>
-<= operator 
-Non-blocking assignment executes "in parallel" because it describes assignments that all occur at the SAME TIME. 
-The result of a statement on the 2nd line will/may not depend on the results of the statement on the 1st line. 
-use non blocking for COMBINATIONAL always blocks (as in each statement executes immediately before the BLOCK is done)
-all assignments deferred until all right-hand sides have been evaluated 
-evaluates the WHOLE ALWAYS BLOCK before making the left handed assigns.
-Do not mix blocking and nonblocking in single always block.
-</pre>
+        //because a is used in both steps the order is crucial
+        always @ (posedge clk)
+        begin
+            a = a+1;
+            b = a;
+        end
 
+        //because either may fire any time, you may get a bad result from this
+        always @ (posedge clk)
+            begin
+            a <= a+1;
+            b <= a;
+        end 
+    </pre>
 
-Infinite loops - Beware
-<pre>
-For sequential blocks the blocking statements ends up in a infinite loop 
-In synthesis they end up in the latches..
 
+    <pre>
+        FROM https://stackoverflow.com/questions/34366297/why-not-write-changes-directly-to-the-output-register
 
-//because a is used in both steps the order is crucial
-always @ (posedge clk)
-begin
-    a = a+1;
-    b = a;
-end
+        Use non-blocking (<=) to assign flops and latches.
+            This removes a race condition in the Verilog simulation scheduler, no impact on synthesis. If you do not use non-blocking then the functional behavior between simulation and circuit could be different. Non-blocking are evaluated immediately but are the new values are not applied until after all operations are completed in the same stamp. This means every time a flop is sampled it will always be the value not before the clock, not the new value.
+        Use blocking (=) to assign combinational logic.
+            Combinational logic needs to be evaluated and updated immediately.
+        Pure combinational logic should be in a separate always block from flops
+            If one always block, incomplete combinational logic will be converted to synchronous logic. This wastes area and flops and is very hard to find.
+            If two always blocks, incomplete combinational logic will infer latches; often complex latches. Latches are less ideal that flops, however linting tools, synthesis tools, and logical equivalency checking tools typically give warnings about latches. These warnings are a way of finding unintended inferred latches.
+            Note: SystemVerilog added a keywords to identify intended combinational logic (always_comb block) and intended latches (always_latch block).
+        It is recommended not to put flops with reset/set (especially asynchronous reset/set) in the same always block that doesn't have reset/set.
+            Some synthesizers will use same flop type with the with the set/reset timed to a constant, which can be a waste of area since this flops are typically bigger.
+        The outputs of a module with sequential logic (flops) should be flops.
+            This rule has to do with timing. It is easier to predict the combinational latency in a module.
+            For example assign pwm = (compare >= ctr); would add additional delay and noise (after synthesis) to downstream modules that receive pwm as an input. As a flop, the output signal is clean.
+    </pre>
 
-//because either may fire any time, you may get a bad result from this
-always @ (posedge clk)
-    begin
-    a <= a+1;
-    b <= a;
-end 
-</pre>
+    <b>sensitivity list</b>
+    always block - sensitivity list = "@()" 
+    <pre>
+        @(*)                 = run whenever anything changes.
+        @(counter_q)         = run when counter_q goes up OR down
+        @(posedge counter_q) = run when counter_q goes UP
+    </pre>
 
+    2 types
+    <pre>
+        level sensitive (for combinational circuits) 
+        edge sensitive (for flip-flops). 
+    </pre>
 
-<pre>
-    FROM https://stackoverflow.com/questions/34366297/why-not-write-changes-directly-to-the-output-register
+    <pre>
+        you cant mix clock and data in the same list.
+        Only the clock (+ async set(reset) ) should be in the sensitivity list of a clocked process. 
+    </pre>
 
-    Use non-blocking (<=) to assign flops and latches.
-        This removes a race condition in the Verilog simulation scheduler, no impact on synthesis. If you do not use non-blocking then the functional behavior between simulation and circuit could be different. Non-blocking are evaluated immediately but are the new values are not applied until after all operations are completed in the same stamp. This means every time a flop is sampled it will always be the value not before the clock, not the new value.
-    Use blocking (=) to assign combinational logic.
-        Combinational logic needs to be evaluated and updated immediately.
-    Pure combinational logic should be in a separate always block from flops
-        If one always block, incomplete combinational logic will be converted to synchronous logic. This wastes area and flops and is very hard to find.
-        If two always blocks, incomplete combinational logic will infer latches; often complex latches. Latches are less ideal that flops, however linting tools, synthesis tools, and logical equivalency checking tools typically give warnings about latches. These warnings are a way of finding unintended inferred latches.
-        Note: SystemVerilog added a keywords to identify intended combinational logic (always_comb block) and intended latches (always_latch block).
-    It is recommended not to put flops with reset/set (especially asynchronous reset/set) in the same always block that doesn't have reset/set.
-        Some synthesizers will use same flop type with the with the set/reset timed to a constant, which can be a waste of area since this flops are typically bigger.
-    The outputs of a module with sequential logic (flops) should be flops.
-        This rule has to do with timing. It is easier to predict the combinational latency in a module.
-        For example assign pwm = (compare >= ctr); would add additional delay and noise (after synthesis) to downstream modules that receive pwm as an input. As a flop, the output signal is clean.
-</pre>
+    <pre>
+        <= operator is used for non-blocking assignments.(get assigned immediately in parallel.)
+        = operator  is used for blocking assignments, that line must finish before the next one can happen.
+    </pre>
 
-===sensitivity list===
-always block - sensitivity list = "@()" 
-<pre>
-@(*)                 = run whenever anything changes.
-@(counter_q)         = run when counter_q goes up OR down
-@(posedge counter_q) = run when counter_q goes UP
-</pre>
+    you can have an always block without sensitivity list, but you need to have a delay (asynchronous logic).
+    <pre>
+         always  begin
+            #5  clk = ~clk;
+         end
+    </pre>
 
-2 types
-<pre>
-level sensitive (for combinational circuits) 
-edge sensitive (for flip-flops). 
-</pre>
 
-<pre>
-you cant mix clock and data in the same list.
-Only the clock (+ async set(reset) ) should be in the sensitivity list of a clocked process. 
-</pre>
+    <b> data types </b>
 
-<pre>
-<= operator is used for non-blocking assignments.(get assigned immediately in parallel.)
-= operator  is used for blocking assignments, that line must finish before the next one can happen.
-</pre>
+    There are no real "data types", you have to encode/decode it all yourself with bits and bytes (wires and registers).
+    It isn’t actually as tedious as it sounds, but yes, this is about as low level as digital electronics gets.
 
-you can have an always block without sensitivity list, but you need to have a delay (asynchronous logic).
-<pre>
- always  begin
-    #5  clk = ~clk;
- end
-</pre>
 
+    <b>Arrays</b>
 
-=== <b> data types </b>===
+    <pre>
 
-There are no real "data types", you have to encode/decode it all yourself with bits and bytes (wires and registers).
-It isn’t actually as tedious as it sounds, but yes, this is about as low level as digital electronics gets.
 
+        reg [7:0] a [0:3];  //1D Array of bytes
 
-===Arrays===
+        reg [7:0] b [0:3] [0:3]; //2D Array of bytes
 
-<pre>
+    </pre>
 
 
-reg [7:0] a [0:3];  //1D Array of bytes
+    initialize an array 
+    <pre>
+        for (k = 0; k < 10 ; k = k + 1) begin
+            commands[k] = 8'h00;
+        end
+    </pre>
 
-reg [7:0] b [0:3] [0:3]; //2D Array of bytes
+    <b>vector signals</b>
+    http://www.asic-world.com/verilog/verilog_one_day.html
+    https://cseweb.ucsd.edu/classes/sp09/cse141L/Slides/01-Verilog1.pdf
+     	
+    a "vector signal" is slang for a compound wire  
+    a "scalar" is a single bit value
 
-</pre>
+    <pre>
+        inout [7:0] address;
+    </pre>
 
 
-initialize an array 
-<pre>
-for (k = 0; k < 10 ; k = k + 1) begin
-    commands[k] = 8'h00;
-end
-</pre>
+    <b>inout</b>
+    bidirectional wires "inout"  
+    Never a reg type 
+    always use conditionally , e.g.
 
-===vector signals===
-http://www.asic-world.com/verilog/verilog_one_day.html
-https://cseweb.ucsd.edu/classes/sp09/cse141L/Slides/01-Verilog1.pdf
- 	
-a "vector signal" is slang for a compound wire  
-a "scalar" is a single bit value
+    For inout ports, you can read the data at any time. But for driving that net, tristate buffers are used. 
+    The reason for that is the same net may be shared with multiple modules and since the net is on inout type, 
+    to remove conflict of multiple driver, the tristate buffers are used.
 
-<pre>
-inout [7:0] address;
-</pre>
 
+    example 1
+    <pre>
+        assign io = t ? i : 1'bz; // To drive the inout net
+        assign o = io; // To read from inout net
+    </pre>
 
-===inout===
-bidirectional wires "inout"  
-Never a reg type 
-always use conditionally , e.g.
+    example 2
+    <pre>
+        module test (value, var);
+          inout value;
+          output reg var;
 
-For inout ports, you can read the data at any time. But for driving that net, tristate buffers are used. 
-The reason for that is the same net may be shared with multiple modules and since the net is on inout type, 
-to remove conflict of multiple driver, the tristate buffers are used.
+          assign value = (condition) ? <some value / expression> : 'bz;
 
+          always @(<event>)
+            var = value;
 
-example 1
-<pre>
-assign io = t ? i : 1'bz; // To drive the inout net
-assign o = io; // To read from inout net
-</pre>
+        endmodule
+    </pre>
 
-example 2
-<pre>
-module test (value, var);
-  inout value;
-  output reg var;
 
-  assign value = (condition) ? <some value / expression> : 'bz;
 
-  always @(<event>)
-    var = value;
 
-endmodule
-</pre>
+    there are no real "data types" - You have to create your own "data type" out of discrete bits
+    <pre>
+        2'b0    - two "bit literals" set to signal low 
+    </pre>
 
+    <pre>
+         hex = 14'h1234;
+         bin = 4'b0110
 
+         Valid base formats are 'b , 'B , 'h , 'H 'd , 'D , 'o , 'O for binary, hexadecimal, decimal, and octal. 
+          
+         Numbers consist of strings of digits (0-9, A-F, a-f, x, X, z, Z). 
+           - X's mean unknown (!watch out with this!) 
+           - Z's mean high impedance 
+           - If no base format is specified the number is assumed to be a decimal number. 
+         
+         Some examples of valid numbers are:
+            2'b10 // 2 bit binary number
+             'b10 // at least a 32-bit binary number
+                3 // at least a 32-bit decimal number
+            8'hAf // 8-bit hexadecimal
+          -16'd47 // negative decimal number 
 
+    </pre>
 
-there are no real "data types" - You have to create your own "data type" out of discrete bits
-<pre>
-2'b0    - two "bit literals" set to signal low 
-</pre>
+    <b> setting data </b>
 
-<pre>
- hex = 14'h1234;
- bin = 4'b0110
+    if you try to initialize a wire to a value, it causes a "multiple drivers" error 
+    <pre>
+        wire leds = 8'hfa; //NO! - BAD! - Think about it, WHERE does a wire store data if it is continuously moving data??? IT CANT!
+    </pre>
 
- Valid base formats are 'b , 'B , 'h , 'H 'd , 'D , 'o , 'O for binary, hexadecimal, decimal, and octal. 
-  
- Numbers consist of strings of digits (0-9, A-F, a-f, x, X, z, Z). 
-   - X's mean unknown (!watch out with this!) 
-   - Z's mean high impedance 
-   - If no base format is specified the number is assumed to be a decimal number. 
- 
- Some examples of valid numbers are:
-    2'b10 // 2 bit binary number
-     'b10 // at least a 32-bit binary number
-        3 // at least a 32-bit decimal number
-    8'hAf // 8-bit hexadecimal
-  -16'd47 // negative decimal number 
+    on a wire  
+    <pre>
+        assign led = 8'b0; //all zeros
+    </pre>
 
-</pre>
+    on a wire in two steps
+    <pre>
+        assign led[6:0] = 7'b0; // 7 zeros
+        led[7]= slowclk;        // 8th from another wire
+    </pre>
 
-=== setting data ===
+    <b> assign </b>
+    continuous assignment with 
+    <pre>
+        just like a gate, drives value onto a wire 
 
-if you try to initialize a wire to a value, it causes a "multiple drivers" error 
-<pre>
-wire leds = 8'hfa; //NO! - BAD! - Think about it, WHERE does a wire store data if it is continuously moving data??? IT CANT!
-</pre>
+        different than a procedural assignment:
+            left handed side (LHS) is always a wire 
+            always evaluated when operands change 
+            cannot occur in a block of sequential code, always a module item by itself 
+            models combinatorial logic 
 
-on a wire  
-<pre>
-assign led = 8'b0; //all zeros
-</pre>
 
-on a wire in two steps
-<pre>
-assign led[6:0] = 7'b0; // 7 zeros
-led[7]= slowclk;        // 8th from another wire
-</pre>
+        neither "blocking" or "nonblocking", it is "continuous". 
+        The output of an assign statement is always equal to the specified function of it's inputs. 
+        "blocking" and "nonblocking" assignments only exist within always blocks.    
+    </pre>
 
-===assign===
-continuous assignment with 
-<pre>
-just like a gate, drives value onto a wire 
+    <b>Always</b>
 
-different than a procedural assignment:
-    left handed side (LHS) is always a wire 
-    always evaluated when operands change 
-    cannot occur in a block of sequential code, always a module item by itself 
-    models combinatorial logic 
+    read: http://www.asic-world.com/verilog/verilog_one_day3.html
+    <pre>
+         reg can be assigned a value in an always block while wires can not (they can be read though).
+         it can not drive wire data type, but can drive reg and integer data types.
+    </pre>
 
 
-neither "blocking" or "nonblocking", it is "continuous". 
-The output of an assign statement is always equal to the specified function of it's inputs. 
-"blocking" and "nonblocking" assignments only exist within always blocks.    
-</pre>
+    <b>comparison of data</b>
 
-===Always===
+    <pre>
+        Defaults to 32 bit?? bad comparisons, explicitly specify the type on all
+    </pre>
 
-read: http://www.asic-world.com/verilog/verilog_one_day3.html
-<pre>
- reg can be assigned a value in an always block while wires can not (they can be read though).
- it can not drive wire data type, but can drive reg and integer data types.
-</pre>
+    The number preceding is not "number of digits" it is number of WIRES/BITS
 
+    the following are NOT equal
+    <pre>
+        2'hff == 10'b011111111
+    </pre>
 
+    the following ARE equal
+    <pre>
+        10'hff == 10'b011111111
+    </pre>
 
+    <b>parameters</b>
+    <pre>
+        module  ram_foobar ( 
+          clk         , // Clock Input
+          address     , // Address Input
+          data        , // Data bi-directional
+          cs          , // Chip Select
+          we          , // Write Enable/Read Enable
+          oe            // Output Enable
+          ); 
+          
+         parameter DATA_WIDTH = 8 ;
+         parameter ADDR_WIDTH = 8 ;
+         parameter RAM_DEPTH = 1 << ADDR_WIDTH;
+           ......
+         
+         endmodule
+    </pre>
 
+    To use it 
+    <pre>
+        module  ram_controller ();//Some ports
+         ram_foobar #( 
+         	.DATA_WIDTH(16), 
+         	.ADDR_WIDTH(8), 
+         	.RAM_DEPTH(256))  mycoolram(clk,address,data,cs,we,oe);
+         endmodule
+    </pre>
 
-===comparison of data===
+    <b> define macro</b>
+    <pre>
+        `define WIDTH 8 
+    </pre>
 
-<pre>
-Defaults to 32 bit?? bad comparisons, explicitly specify the type on all
-</pre>
+    <pre>
+        output [`WIDTH-1 : 0] count;
+    </pre>
 
-The number preceding is not "number of digits" it is number of WIRES/BITS
+    <b>UCF file</b>
+    User Constraint file, it is used to setup IO pins and ports
+    <pre>
 
-the following are NOT equal
-<pre>
-2'hff == 10'b011111111
-</pre>
+    </pre>
+    3.3Vots! really! I thought it was a 1.2 volt device???
+    <pre>
+        NET "spi_channel<0>" LOC = P46 | IOSTANDARD = LVCMOS33;
+    </pre>
 
-the following ARE equal
-<pre>
-10'hff == 10'b011111111
-</pre>
+    <pre>
+        NET "k1" LOC = P75 | IOSTANDARD = LVCMOS33  | CLOCK_DEDICATED_ROUTE = FALSE;
+        NET "k2" LOC = P74 | IOSTANDARD = LVCMOS33  | CLOCK_DEDICATED_ROUTE = FALSE;
+    </pre>
 
-===parameters===
-<pre>
-module  ram_foobar ( 
-  clk         , // Clock Input
-  address     , // Address Input
-  data        , // Data bi-directional
-  cs          , // Chip Select
-  we          , // Write Enable/Read Enable
-  oe            // Output Enable
-  ); 
-  
- parameter DATA_WIDTH = 8 ;
- parameter ADDR_WIDTH = 8 ;
- parameter RAM_DEPTH = 1 << ADDR_WIDTH;
-   ......
- 
- endmodule
-</pre>
+    Setup a register to the outside.
+    <pre>
+        NET "kgl<0>" LOC = P75 | IOSTANDARD = LVTTL | PULLDOWN;
+        NET "kgl<1>" LOC = P74 | IOSTANDARD = LVTTL | PULLDOWN;
+        NET "kgl<2>" LOC = P79 | IOSTANDARD = LVTTL | PULLDOWN;
+        NET "kgl<3>" LOC = P78 | IOSTANDARD = LVTTL | PULLDOWN;
+        NET "kgl<4>" LOC = P81 | IOSTANDARD = LVTTL | PULLDOWN;
+        NET "kgl<5>" LOC = P80 | IOSTANDARD = LVTTL | PULLDOWN;
+        NET "kgl<6>" LOC = P83 | IOSTANDARD = LVTTL | PULLDOWN;
+        NET "kgl<7>" LOC = P82 | IOSTANDARD = LVTTL | PULLDOWN;
+    </pre>
 
-To use it 
-<pre>
-module  ram_controller ();//Some ports
- ram_foobar #( 
- 	.DATA_WIDTH(16), 
- 	.ADDR_WIDTH(8), 
- 	.RAM_DEPTH(256))  mycoolram(clk,address,data,cs,we,oe);
- endmodule
-</pre>
 
-=== define macro===
-<pre>
-`define WIDTH 8 
-</pre>
-<pre>
-output [`WIDTH-1 : 0] count;
-</pre>
 
-===UCF file===
-User Constraint file, it is used to setup IO pins and ports
-<pre>
+    <b>Verilog Operators</b>
 
-</pre>
-3.3Vots! really! I thought it was a 1.2 volt device???
-<pre>
-   NET "spi_channel<0>" LOC = P46 | IOSTANDARD = LVCMOS33;
-</pre>
 
-<pre>
-NET "k1" LOC = P75 | IOSTANDARD = LVCMOS33  | CLOCK_DEDICATED_ROUTE = FALSE;
-NET "k2" LOC = P74 | IOSTANDARD = LVCMOS33  | CLOCK_DEDICATED_ROUTE = FALSE;
-</pre>
+    <b>conditionals</b>
 
-Setup a register to the outside.
-<pre>
-NET "kgl<0>" LOC = P75 | IOSTANDARD = LVTTL | PULLDOWN;
-NET "kgl<1>" LOC = P74 | IOSTANDARD = LVTTL | PULLDOWN;
-NET "kgl<2>" LOC = P79 | IOSTANDARD = LVTTL | PULLDOWN;
-NET "kgl<3>" LOC = P78 | IOSTANDARD = LVTTL | PULLDOWN;
-NET "kgl<4>" LOC = P81 | IOSTANDARD = LVTTL | PULLDOWN;
-NET "kgl<5>" LOC = P80 | IOSTANDARD = LVTTL | PULLDOWN;
-NET "kgl<6>" LOC = P83 | IOSTANDARD = LVTTL | PULLDOWN;
-NET "kgl<7>" LOC = P82 | IOSTANDARD = LVTTL | PULLDOWN;
-</pre>
+    <b>ternary operators/question mark / mux</b>
+    "?" is shorthand for an if statement
+    <pre>
+        #Format:
+        condition ? if true : if false
 
-==<b>Verilog Operators</b>==
+        #Example:
+        tone[23] ? clkdivider-1 : clkdivider/2-1
 
+        #translates to 
+        if tone[23] is 1, counter = clkdivider-1
+        else counter = clkdivider/2-1
 
-===conditionals===
+    </pre>
 
-===ternary operators/question mark / mux===
-"?" is shorthand for an if statement
-<pre>
-#Format:
-condition ? if true : if false
+    question mark is basically equivalent to "IF -> THEN"
+    <pre>
+        (a) ? 4'b110x : 4'b1000;
 
-#Example:
-tone[23] ? clkdivider-1 : clkdivider/2-1
+        #If 'a' has a non-zero value then the result of this expression is 4'b110x. 
+        #If 'a' is 0, then the result of this expression is 4'b1000. 
+        #If 'a' is x value then the result is 4'b1x0x 
+    </pre>
 
-#translates to 
-if tone[23] is 1, counter = clkdivider-1
-else counter = clkdivider/2-1
 
-</pre>
+    tri-state buffer example
+    <pre>
+        assign data_out = (enable) ? data_reg : 8'bz;
+    </pre>
 
-question mark is basically equivalent to "IF -> THEN"
-<pre>
-(a) ? 4'b110x : 4'b1000;
 
-#If 'a' has a non-zero value then the result of this expression is 4'b110x. 
-#If 'a' is 0, then the result of this expression is 4'b1000. 
-#If 'a' is x value then the result is 4'b1x0x 
-</pre>
+    <b>Equality and Relational Operators</b>
 
+    return X if an operand has X or Z	
 
-tri-state buffer example
-<pre>
-assign data_out = (enable) ? data_reg : 8'bz;
-</pre>
+    <pre>
+        m == n  // is m equal to n? (1-bit True/False result)
 
+        m != n  // is m not equal to n? (1-bit True/False result)
 
-===Equality and Relational Operators===
+        m < n   // is m less than n? (1-bit True/False result)
 
-return X if an operand has X or Z	
+        m > n   // is m greater than n? (1-bit True/False result)
 
-<pre>
-m == n  // is m equal to n? (1-bit True/False result)
+        m <= n  // is m less than or equal to n? (1-bit True/False result)
 
-m != n  // is m not equal to n? (1-bit True/False result)
+        m >= n  // is m greater than or equal to n? (1-bit True/False result)
+    </pre>
 
-m < n   // is m less than n? (1-bit True/False result)
+    <b>Identity Operators</b>
 
-m > n   // is m greater than n? (1-bit True/False result)
+    (compare logic values 0, 1, X, and Z)
 
-m <= n  // is m less than or equal to n? (1-bit True/False result)
+    <pre>
+        m === n // is m identical to n? (1-bit True/False results)
 
-m >= n  // is m greater than or equal to n? (1-bit True/False result)
-</pre>
+        m !== n // is m not identical to n? (1-bit True/False result)
+    </pre>
 
-===Identity Operators===
+    example - If reg a is less than 2'b10, store 2'b11 in a.
+    <pre>
+        if (a < 2'b10) begin
+           a = 2'b11;
+        end
+    </pre>
 
-(compare logic values 0, 1, X, and Z)
+    Caveats
+    <pre>
+        For most operations, the operands may be nets, variables, constants or function calls. Some operations are not legal on real (floating-point) values.
+        Operators which return a true/false result will return a 1-bit value where 1 represents true, 0 represents false, and X represents indeterminate
+        The === and !== operators are not supported for synthesis, because Z and X do not have the same meaning in simulation and hardware.
+        If you compare two numbers of unequal width, the smaller will be expanded. Unsigned operands are expanded by left-extending with zero. Signed operands are expanded by left-extending with the value of the mostsignificant bit (the sign bit).
+    </pre>
 
-<pre>
-m === n // is m identical to n? (1-bit True/False results)
 
-m !== n // is m not identical to n? (1-bit True/False result)
-</pre>
 
-example - If reg a is less than 2'b10, store 2'b11 in a.
-<pre>
-if (a < 2'b10) begin
-   a = 2'b11;
-end
-</pre>
 
-Caveats
-<pre>
-    For most operations, the operands may be nets, variables, constants or function calls. Some operations are not legal on real (floating-point) values.
-    Operators which return a true/false result will return a 1-bit value where 1 represents true, 0 represents false, and X represents indeterminate
-    The === and !== operators are not supported for synthesis, because Z and X do not have the same meaning in simulation and hardware.
-    If you compare two numbers of unequal width, the smaller will be expanded. Unsigned operands are expanded by left-extending with zero. Signed operands are expanded by left-extending with the value of the mostsignificant bit (the sign bit).
-</pre>
+    <b> Equality Operators </b>
 
+    <pre>
+    logical equality (== )
+    logical inequality (!= )
+    logical case equality (===)
+    logical case inequality (!==)
+    Equality operators return logical 1 if expression is true
+    Ex:
+        wire CounterXmaxed = (CounterX==793);
 
+    </pre>
 
+    <b>replication</b>
 
-=== Equality Operators ===
+    used to "branch" a signal into multiple wires 
+    as opposed to a register which stores multiple values for each bit 
 
-<pre>
-logical equality (== )
-logical inequality (!= )
-logical case equality (===)
-logical case inequality (!==)
-Equality operators return logical 1 if expression is true
-Ex:
-    wire CounterXmaxed = (CounterX==793);
+    <pre>
+        reg [24:0] counter_d, counter_q;
 
-</pre>
+        assign led = {8{counter_q[24]}};
 
-===replication===
+        always @(counter_q) begin
+            counter_d = counter_q + 1'b1;
+        end
+        always @(posedge clk) begin
+            if (rst) begin
+                counter_q <= 25'b0;
+            end else begin
+                counter_q <= counter_d;
+            end
+        end
+    </pre>
 
-used to "branch" a signal into multiple wires 
-as opposed to a register which stores multiple values for each bit 
 
-<pre>
-reg [24:0] counter_d, counter_q;
 
-assign led = {8{counter_q[24]}};
+    This will only set the first led , even though there are 4
+    <pre>
+        assign led[3:0] = rst;
+    </pre>
 
-always @(counter_q) begin
-    counter_d = counter_q + 1'b1;
-end
-always @(posedge clk) begin
-    if (rst) begin
-        counter_q <= 25'b0;
-    end else begin
-        counter_q <= counter_d;
-    end
-end
-</pre>
+    This will set all 4 (8 actually)
+    <pre>
+        assign led[3:0] = {4{rst}};
+        assign led[7:4] = {4{~rst}};
+    </pre>
 
+    <b>concatenation</b>
 
+    <pre>
+        always @(posedge clk)
+         if (reset) begin  
+           out <= 8'b0 ;
+         end else if (enable) begin
+           out <= {out[6],out[5],
+                   out[4],out[3],
+                   out[2],out[1],
+                   out[0], linear_feedback};
+         end 
+        end
+    </pre>
 
-This will only set the first led , even though there are 4
-<pre>
-assign led[3:0] = rst;
-</pre>
+    ...more
+    <pre>
+          else if (enable) begin
+         28     if (up_down) begin
+         29       count <= {~(^(count & `WIDTH'b01100011)),count[`WIDTH-1:1]};
+         30     end else begin
+         31       count <= {count[`WIDTH-2:0],~(^(count &  `WIDTH'b10110001))};
+         32     end
+         33  end
+    </pre>
 
-This will set all 4 (8 actually)
-<pre>
-assign led[3:0] = {4{rst}};
-assign led[7:4] = {4{~rst}};
-</pre>
+    ...more
+    <pre>
+        assign out_1 = { in1[5:3],
+                         (in2 & in3),
+                         in4[10:8]
+                       }
+    </pre>
 
-===concatenation===
+    <b>logical vs bitwise</b>
+    <pre>
+        (~rst) is not (!rst) 
+        logical negation operator (!) - only is TRUE or FALSE for all the bits in a bus.
+        bitwise negation operator (~) - evaluates EACH BIT individually
+    </pre>
 
-<pre>
-always @(posedge clk)
- if (reset) begin  
-   out <= 8'b0 ;
- end else if (enable) begin
-   out <= {out[6],out[5],
-           out[4],out[3],
-           out[2],out[1],
-           out[0], linear_feedback};
- end 
-end
-</pre>
+    <b>reduction</b>
 
-...more
-<pre>
-  else if (enable) begin
- 28     if (up_down) begin
- 29       count <= {~(^(count & `WIDTH'b01100011)),count[`WIDTH-1:1]};
- 30     end else begin
- 31       count <= {count[`WIDTH-2:0],~(^(count &  `WIDTH'b10110001))};
- 32     end
- 33  end
-</pre>
+    <pre>
+        AND 	&
+        NAND 	~&
+        OR 	|
+        NOR 	~|
+        XOR 	^
+        XNOR 	~^ or ^~
+    </pre>
 
-...more
-<pre>
-assign out_1 = { in1[5:3],
-                 (in2 & in3),
-                 in4[10:8]
-               }
-</pre>
+    <pre>
+        Reduction operators are very similar to the bitwise operators, except they are performed on all the bits of a single value. 
+        reduce the number of bits to one by performing the specified function on every bit.
 
-===logical vs bitwise===
-<pre>
-(~rst) is not (!rst) 
-logical negation operator (!) - only is TRUE or FALSE for all the bits in a bus.
-bitwise negation operator (~) - evaluates EACH BIT individually
-</pre>
+        assign b = &a;
+        #IS EQUAL TO 
+        assign b = a[0] & a[1] & a[2] & a[3];
+    </pre>
 
-===reduction===
+    <b>Bit Shift</b>
+    <pre>
+        assign led = foo_out >> 2;
+    </pre>
 
-<pre>
-AND 	&
-NAND 	~&
-OR 	|
-NOR 	~|
-XOR 	^
-XNOR 	~^ or ^~
-</pre>
+    <pre>
+        >> is a binary right shift adding 0's to the MSB.
+        >>> is a signed shift which maintains the value of the MSB if the left input is signed.
+    </pre>
 
-<pre>
-Reduction operators are very similar to the bitwise operators, except they are performed on all the bits of a single value. 
-reduce the number of bits to one by performing the specified function on every bit.
+    <pre>
+        Shift Right 	        >>
+        Shift Left 	        <<
+        Arithmetic Shift Right 	>>>
+        Arithmetic Shift Left 	<<<
+    </pre>
 
-assign b = &a;
-#IS EQUAL TO 
-assign b = a[0] & a[1] & a[2] & a[3];
-</pre>
+    <b>Pound sign</b>
 
-===Bit Shift===
-<pre>
-assign led = foo_out >> 2;
-</pre>
+    Delay operation 
+    <pre>
+        #(cycle/2) clk ~= clk 
 
-<pre>
->> is a binary right shift adding 0's to the MSB.
->>> is a signed shift which maintains the value of the MSB if the left input is signed.
-</pre>
+        //is the same as 
 
-<pre>
-Shift Right 	        >>
-Shift Left 	        <<
-Arithmetic Shift Right 	>>>
-Arithmetic Shift Left 	<<<
-</pre>
+        always begin
+           #(cycle/2) //wait for cycle/2 time
+           clk ~= clk;
 
-===Pound sign===
+        wait X units of your timescale.
+        end
+    </pre>
 
-Delay operation 
-<pre>
-#(cycle/2) clk ~= clk 
+    <pre>
+        sometimes used with raw values, like #5 or #10, 
+        means to wait 5 or 10 units of your timescale.
+    </pre>
 
-//is the same as 
 
-always begin
-   #(cycle/2) //wait for cycle/2 time
-   clk ~= clk;
+    <b>Module inside other modules</b>
+    reg vs wire on IO ports:
+    <pre>
+        if you plan to assign your output in sequential code,such as within an always block,
+        declare it as a reg (which really is a misnomer for "variable" in Verilog). 
+        Otherwise, it should be a wire, which is also the default.
+    </pre>
 
-wait X units of your timescale.
-end
-</pre>
+    BEWARE!
 
-<pre>
-sometimes used with raw values, like #5 or #10, 
-means to wait 5 or 10 units of your timescale.
-</pre>
+    I lost a few hours on a bug that did not show up.
+    When you instantiate a module, verilog will allow you to specify a wire that DOES NOT EXIST, 
+    because presumably, it builds a new one on the fly. 
+    <pre>
 
+    	spi_slave foo(
+    	    .clk(clk),
+    	    .rst(rst),
+    	    .ss(spi1_cs),
+    	    .mosi(spi1_mos1),<-----!! I accidentally typed this and didnt notice!!
+    	    .miso(spi1_miso), 
+    	    .sck(spi1_clock),
+    	    .done(spi1_isdone),
+    	    .din(spi1_tohost),    
+    	    .dout(spi1_fromhost)  
+    	);
+    </pre>
 
-===Module inside other modules===
-reg vs wire on IO ports:
-<pre>
-if you plan to assign your output in sequential code,such as within an always block,
-declare it as a reg (which really is a misnomer for "variable" in Verilog). 
-Otherwise, it should be a wire, which is also the default.
-</pre>
+    <h3><b>General Verilog</b></h3>
 
-BEWARE!
+    <b> functions and tasks </b>
+    <pre> 	
+        Functions and tasks have the same syntax; 
+        tasks can have delays
+        functions can not have any delay.
+    </pre>
 
-I lost a few hours on a bug that did not show up.
-When you instantiate a module, verilog will allow you to specify a wire that DOES NOT EXIST, 
-because presumably, it builds a new one on the fly. 
-<pre>
 
-	spi_slave foo(
-	    .clk(clk),
-	    .rst(rst),
-	    .ss(spi1_cs),
-	    .mosi(spi1_mos1),<-----!! I accidentally typed this and didnt notice!!
-	    .miso(spi1_miso), 
-	    .sck(spi1_clock),
-	    .done(spi1_isdone),
-	    .din(spi1_tohost),    
-	    .dout(spi1_fromhost)  
-	);
-</pre>
+    <b>(pin) Arrays</b>
+    in UCF file
+    <pre>
+        NET "kgl<0>" LOC = P75 | IOSTANDARD = LVTTL | PULLDOWN;
+        NET "kgl<1>" LOC = P74 | IOSTANDARD = LVTTL | PULLDOWN;
+        NET "kgl<2>" LOC = P79 | IOSTANDARD = LVTTL | PULLDOWN;
+        NET "kgl<3>" LOC = P78 | IOSTANDARD = LVTTL | PULLDOWN;
+        NET "kgl<4>" LOC = P81 | IOSTANDARD = LVTTL | PULLDOWN;
+        NET "kgl<5>" LOC = P80 | IOSTANDARD = LVTTL | PULLDOWN;
+        NET "kgl<6>" LOC = P83 | IOSTANDARD = LVTTL | PULLDOWN;
+        NET "kgl<7>" LOC = P82 | IOSTANDARD = LVTTL | PULLDOWN;
+    </pre>
 
-==<b>General Verilog</b>==
+    in module 
+    <pre>
+        module mojo_top(
+            input [7:0]kgl,
+            output[7:0]led,
+        )
 
-=== functions and tasks ===
-<pre> 	
-Functions and tasks have the same syntax; 
-tasks can have delays
-functions can not have any delay.
-</pre>
+        assign led = kgl;
+    </pre>
 
-===(pin) Arrays===
 
-in UCF file
-<pre>
-NET "kgl<0>" LOC = P75 | IOSTANDARD = LVTTL | PULLDOWN;
-NET "kgl<1>" LOC = P74 | IOSTANDARD = LVTTL | PULLDOWN;
-NET "kgl<2>" LOC = P79 | IOSTANDARD = LVTTL | PULLDOWN;
-NET "kgl<3>" LOC = P78 | IOSTANDARD = LVTTL | PULLDOWN;
-NET "kgl<4>" LOC = P81 | IOSTANDARD = LVTTL | PULLDOWN;
-NET "kgl<5>" LOC = P80 | IOSTANDARD = LVTTL | PULLDOWN;
-NET "kgl<6>" LOC = P83 | IOSTANDARD = LVTTL | PULLDOWN;
-NET "kgl<7>" LOC = P82 | IOSTANDARD = LVTTL | PULLDOWN;
-</pre>
 
-in module 
-<pre>
-module mojo_top(
-    input [7:0]kgl,
-    output[7:0]led,
-)
+    <b>set a register value</b>
+    <pre>
+        #DONT TRY THIS WITH A WIRE- it will appear to work but when you try to use it throw a "multiple drivers" error 
+        #You can combine the register declaration with initialization.
+        reg [7:0] data_reg = 8'b10101011;
 
-assign led = kgl;
-</pre>
+        #Or you can use an initial block
+        reg [7:0] data_reg;
+        initial data_reg = 8'b10101011;
+    </pre>
 
+    <b>Latch Vs Register</b>
+    <pre>
+        Latches are created when you create a combinational process or conditional assignment (in VHDL) or a combinational 
+        always block (in Verilog) with an output that is not assigned under all possible input conditions.
 
+        Latches are "bad" because:
+           -almost always unintentionally inferred by poorly written source code
+           -FPGA timing based place/route algorithms are single-mindedly oriented to register-based design
 
-===set a register value===
-<pre>
-#DONT TRY THIS WITH A WIRE- it will appear to work but when you try to use it throw a "multiple drivers" error 
-#You can combine the register declaration with initialization.
-reg [7:0] data_reg = 8'b10101011;
+        inferred latches inside synchronous block becomes become an inferred flip-flop.
 
-#Or you can use an initial block
-reg [7:0] data_reg;
-initial data_reg = 8'b10101011;
-</pre>
+    </pre>
 
-===Latch Vs Register===
-<pre>
-Latches are created when you create a combinational process or conditional assignment (in VHDL) or a combinational 
-always block (in Verilog) with an output that is not assigned under all possible input conditions.
 
-Latches are "bad" because:
-   -almost always unintentionally inferred by poorly written source code
-   -FPGA timing based place/route algorithms are single-mindedly oriented to register-based design
+    Causes of Latches:
+    <pre>
+        Signal(s) missing for the sensitivity list (this is why @* should be used
 
-inferred latches inside synchronous block becomes become an inferred flip-flop.
+        Missing Condition in case statement
 
-</pre>
+        (combinatorial) Feedback Loop
 
 
-Causes of Latches:
-<pre>
-Signal(s) missing for the sensitivity list (this is why @* should be used
+    </pre>
 
-Missing Condition in case statement
 
-(combinatorial) Feedback Loop
+    <pre>
+        To solve unintended latches, define a default value in conditionals
+    </pre>
 
+    <b>set wires</b>
+    DONT attempt to declare it when you initialize, this causes a "multiple drivers" error - if you try to hook it up to anything 
 
-</pre>
+    It makes sense that you cant initialize. A WIRE doesnt STORE data, it only DRIVES it from one place to another.
 
+    BAD
+    <pre>
+        wire[7:0] blink = 8'b0;
+    </pre>
 
-<pre>
-To solve unintended latches, define a default value in conditionals
-</pre>
+    GOOD
+    <pre>
+        wire[7:0] blink;
+    </pre>
 
-===set wires===
-DONT attempt to declare it when you initialize, this causes a "multiple drivers" error - if you try to hook it up to anything 
+    Here's where it gets a little weird. 
+    Wires are electrical pathways, but you can also do logical operations on them.
+
+    Here is code in a VGA generator to turn the colors off and on based on an XY pixel counter
+    <pre>	
+        wire R = border;
+        wire G = (CounterX%20==0&&CounterY==470); 
+        wire B = (CounterX%20==0&&CounterY==470);
+    </pre>
 
-It makes sense that you cant initialize. A WIRE doesnt STORE data, it only DRIVES it from one place to another.
-
-BAD
-<pre>
-wire[7:0] blink = 8'b0;
-</pre>
-
-GOOD
-<pre>
-wire[7:0] blink;
-</pre>
-
-Here's where it gets a little weird. 
-Wires are electrical pathways, but you can also do logical operations on them.
-
-Here is code in a VGA generator to turn the colors off and on based on an XY pixel counter
-<pre>	
-wire R = border;
-wire G = (CounterX%20==0&&CounterY==470); 
-wire B = (CounterX%20==0&&CounterY==470);
-</pre>
-
-
-Wire in always block VS assign 
-These are equivalent
-<pre>
-reg [3:0] answer_reg;
-always @* begin
-  answer_reg = a + c;
-end
-</pre>
-
-<pre>
-wire [3:0] answer_wire;
-assign answer_wire = a + c;
-</pre>
-
-=== wire to another wire ===
-<pre>
-wire [7:0] bufbyte;
-assign bufbyte = led;
-</pre>
-
-=== set a wire explicitly ===
-<pre>
-wire [7:0] bufbyte;
-
-assign bufbyte = 8'b10110011;
-assign led = bufbyte;
-</pre>
-
-===wire to another wire 2===
-
-branch a wire into another wire
-"wire" is a SINGLE SEGMENT of wire. It is easy to branch it, but you have two define it twice
-consider the following:
-
-HELL NO! this is a multiple driver error because SPI3 bus is routed to two places.(see below)
-<pre>
-    wire bitsy_clk;
-    wire bitsy_cs;
-    wire bitsy_mosi;
-    wire bitsy_miso;
-                
-    assign bitsy_clk = klspi_clk_3;
-    assign bitsy_cs = klspi_cs_3;
-    assign bitsy_mosi = klspi_mosi3;
-    assign bitsy_miso = klspi_miso3;
-
-    ftdi_spi_hook ONE_BITSY(
+
+    Wire in always block VS assign 
+    These are equivalent
+    <pre>
+        reg [3:0] answer_reg;
+        always @* begin
+          answer_reg = a + c;
+        end
+    </pre>
+
+    <pre>
+        wire [3:0] answer_wire;
+        assign answer_wire = a + c;
+    </pre>
+
+    <b> wire to another wire </b>
+    <pre>
+        wire [7:0] bufbyte;
+        assign bufbyte = led;
+    </pre>
+
+    <b> set a wire explicitly </b>
+    <pre>
+        wire [7:0] bufbyte;
+
+        assign bufbyte = 8'b10110011;
+        assign led = bufbyte;
+    </pre>
+
+    <b>wire to another wire 2</b>
+
+    branch a wire into another wire
+    "wire" is a SINGLE SEGMENT of wire. It is easy to branch it, but you have two define it twice
+    consider the following:
+
+    HELL NO! this is a multiple driver error because SPI3 bus is routed to two places.(see below)
+    <pre>
+        wire bitsy_clk;
+        wire bitsy_cs;
+        wire bitsy_mosi;
+        wire bitsy_miso;
+                    
+        assign bitsy_clk = klspi_clk_3;
+        assign bitsy_cs = klspi_cs_3;
+        assign bitsy_mosi = klspi_mosi3;
+        assign bitsy_miso = klspi_miso3;
+
+        ftdi_spi_hook ONE_BITSY(
+            .clk(clk),
+            .rst(rst),
+            .spi1_cs(klspi_cs_3),
+            .spi1_mosi(klspi_mosi3),
+            .spi1_miso(klspi_miso3), 
+            .spi1_clock(klspi_clk_3),
+            .spi1_isdone(isdone),
+            .spi1_tohost(tx_spi_byte),      //TO HOST COMPUTER
+            .spi1_fromhost(from_computer)   //FROM HOST COMPUTER
+        );
+
+    </pre>
+
+
+    This works (each SINGLE SEGMENT gets its signal from a common source )
+    <pre>
+        wire bitsy_clk;
+        wire bitsy_cs;
+        wire bitsy_mosi;
+        wire bitsy_miso;
+                    
+        assign bitsy_clk = klspi_clk_3;
+        assign bitsy_cs = klspi_cs_3;
+        assign bitsy_mosi = klspi_mosi3;
+        assign bitsy_miso = klspi_miso3;
+
+        wire snooper_clk;
+        wire snooper_cs;
+        wire snooper_mosi;
+        wire snooper_miso;
+                    
+        assign snooper_clk = klspi_clk_3;
+        assign snooper_cs = klspi_cs_3;
+        assign snooper_mosi = klspi_mosi3;
+        assign snooper_miso = klspi_miso3;
+
+        ftdi_spi_hook ONE_BITSY(
+            .clk(clk),
+            .rst(rst),
+            .spi1_cs(bitsy_cs),
+            .spi1_mosi(bitsy_mosi),
+            .spi1_miso(bitsy_miso), 
+            .spi1_clock(bitsy_clk),
+            .spi1_isdone(isdone),
+            .spi1_tohost(tx_spi_byte),      //TO HOST COMPUTER
+            .spi1_fromhost(from_computer)   //FROM HOST COMPUTER
+        );
+
+    </pre>
+
+    <b> wire to module and back to wire </b>
+    note that Dout is a REGISTER wired to a wire
+    <pre>
+        wire [7:0] bufbyte;
+
+        shift_reg_2 mysr (
+             .....
+            .Dout(bufbyte),
+             .....            
+        );
+        assign led = bufbyte;
+    </pre>
+
+    <b> module -> wire -> reg -> back to wire</b>
+    <pre>
+        wire [7:0] bufbyte;
+        reg [7:0] bufbyte2;
+
+        shift_reg_2 mysr (
+            .....
+            .Dout(bufbyte), //register type output in modules always block
+            .....
+                    
+        );
+
+        always @* begin
+            bufbyte2 <= bufbyte;
+        end
+
+        assign led = bufbyte2; //wire on LEFT side
+    </pre>
+
+    <b>Clocking/Default values</b>
+    Implicit "Case" or "if" latch when incomplete
+    <pre>
+        A latch is inferred in a combinatorial block where the net is not assigned to a known value.
+        ALWAYS MAKE A DEFAULT VALUE FOR CASE!!
+    </pre>
+
+    case statements should have a default condition.
+    if statements should have a corresponding else.
+    <pre>
+        default:d=c;
+    </pre>
+
+    <pre>
+        always @(a or b) // inferred latch :: "c" missing for the list.
+        begin
+          out = a + b + c;
+        end
+    </pre>
+
+
+
+    <b>generate</b>
+    <pre>
+      genvar i;
+      generate
+        for (i = 0; i < 8; i=i+1) begin: NAMEOFLOOP
+          ###DO SOEMTHIG WITH "i"
+        end
+      endgenerate
+    </pre>
+
+    <b>state machines</b>
+    <pre>
+        Mealy State Machine : Its output depends on current state and current inputs. 
+    </pre>
+    <pre>
+        Moore State Machine : Its output depends on current state only. 
+    </pre>
+
+
+    my first simple state machine 
+    <pre>
+        //roll a bit counter for visual effect
+        reg [24:0] counter;
+        always @(posedge clk) begin
+            counter = counter + 1'b1;
+        end
+
+        //define the possible states 
+        parameter STATE1 = 8'h01, 
+                  STATE2 = 8'h02;
+
+
+        //the state control logic 
+        always @* begin
+            if (rx_spi_byte==STATE1) begin 
+                led_buffer2 <= 8'haa; 
+            end 
+            if (rx_spi_byte==STATE2) begin 
+                led_buffer2 <= counter[24:17]; 
+            end
+        end
+
+        //show the output
+        assign led = led_buffer2;
+    </pre>
+
+    <h3><b>Encoding/Protocols</b></h3>
+
+    <b>SPI</b>
+    <pre>
+        CPOL stands for Clock POLarity and designates the default value (high/low) of the SCK signal when the bus is idle. 
+        CPHA stands for Clock PHAse and determines which edge of the clock data is sampled (rising/falling). 
+
+        #The most common settings are CPOL=0 (idle low) and CPHA=0 (sample rising edge).
+
+        At CPOL=0 the base value of the clock is zero
+        For CPHA=0, data are captured on the clock's rising edge (low→high transition) and data are propagated on a falling edge (high→low clock transition).
+        For CPHA=1, data are captured on the clock's falling edge and data are propagated on a rising edge.
+        At CPOL=1 the base value of the clock is one (inversion of CPOL=0)
+        For CPHA=0, data are captured on clock's falling edge and data are propagated on a rising edge.
+        For CPHA=1, data are captured on clock's rising edge and data are propagated on a falling edge.
+    </pre>
+
+    <h3><b>Verilog Examples</b></h3>
+
+    <b>AND gate </b>
+
+    and primitive - with concatenation
+    <pre>
+    assign foo = 1'b0;
+    assign bar = 1'b1;
+
+    and foonet (out, foo, bar );
+
+    assign led = {
+                   bufbyte[7:2],
+                   out,
+                   1'b1
+                 
+                 };
+    </pre>
+
+
+    and gate in a module
+    <pre>
+        module andgate (a, b, y);
+          input a, b;
+          output y;
+          assign y = a & b;
+        endmodule
+    </pre>
+
+    <b>import external verilog module</b>
+    https://embeddedmicro.com/tutorials/mojo/synchronous-logic
+
+    blinker.v (verilog)
+    <pre>
+        module blinker(
+            input clk,
+            input rst,
+            output blink
+          );
+           
+          reg [24:0] counter_d, counter_q;
+           
+          assign blink = counter_q[24];
+           
+          always @(counter_q) begin
+            counter_d = counter_q + 1'b1;
+          end
+         
+          always @(posedge clk) begin
+            if (rst) begin
+              counter_q <= 25'b0;
+            end else begin
+              counter_q <= counter_d;
+            end
+          end
+        endmodule
+    </pre>
+
+
+    <pre>
+        module mojo_top(
+          
+          ..........
+
+          blinker awesome_blinker (
+            .clk(clk),
+            .rst(rst),
+            .blink(led[0])
+          );
+           
+        endmodule
+    </pre>
+
+    <b>I/O example</b> 
+    //https://embeddedmicro.com/tutorials/lucid/external-io-tutorial
+    <pre>
+        module mojo_top(
+            .........
+            input button            // Super cool button!
+        );
+    </pre>
+    
+    UCF file addition
+    <pre>
+        NET "button" LOC = P51 | IOSTANDARD = LVTTL | PULLUP;
+    </pre>
+    <pre>
+        assign led[7] = ~button;       // connect the button
+    </pre>
+
+
+    <b>intermediate signal</b>
+
+    <pre>
+        wire[7:0] blink; //this is the intermediate 
+
+        reg [24:0] counter_d, counter_q;
+
+        assign blink = {8{counter_q[24]}};
+
+        always @(counter_q) begin
+            counter_d = counter_q + 1'b1;
+        end
+        always @(posedge clk) begin
+            if (rst) begin
+                counter_q <= 25'b0;
+            end else begin
+                counter_q <= counter_d;
+            end
+        end
+
+        assign led[3:0] = blink[3:0] ; 
+        assign led[7:4] = ~blink[7:4] ; 
+    </pre>
+
+    <b>wire two modules together</b>
+
+    <pre>
+        module intermed_wire(
+            input in_1,
+            input in_2,
+            input in_3,    
+            output out_1,
+            output out_2
+        );
+          wire intermediate_sig;
+          assign intermediate_sig = in_1 & in_2;
+          assign out_1 = intermediate_sig & in_3;
+          assign out_2 = intermediate_sig | in_3;
+        endmodule
+    </pre>
+
+    <pre>
+    module mojo_top()
+      ........
+    wire boobaz;
+
+    blinker awesome_blinker (
         .clk(clk),
-        .rst(rst),
-        .spi1_cs(klspi_cs_3),
-        .spi1_mosi(klspi_mosi3),
-        .spi1_miso(klspi_miso3), 
-        .spi1_clock(klspi_clk_3),
-        .spi1_isdone(isdone),
-        .spi1_tohost(tx_spi_byte),      //TO HOST COMPUTER
-        .spi1_fromhost(from_computer)   //FROM HOST COMPUTER
+        .rst(foobar),
+        .blink(boobaz)
+      );
+
+    assign led[0] = boobaz;
+
+    intermed_wire iwyre (
+       .in_1(boobaz),
+       .in_2(boobaz),
+       .in_3(boobaz),
+       .out_1(led[2]),
+       .out_2(led[3])	 
     );
 
-</pre>
+    endmodule
+    </pre>
 
 
-This works (each SINGLE SEGMENT gets its signal from a common source )
-<pre>
-    wire bitsy_clk;
-    wire bitsy_cs;
-    wire bitsy_mosi;
-    wire bitsy_miso;
-                
-    assign bitsy_clk = klspi_clk_3;
-    assign bitsy_cs = klspi_cs_3;
-    assign bitsy_mosi = klspi_mosi3;
-    assign bitsy_miso = klspi_miso3;
+    ===FlipFLop===
 
-    wire snooper_clk;
-    wire snooper_cs;
-    wire snooper_mosi;
-    wire snooper_miso;
-                
-    assign snooper_clk = klspi_clk_3;
-    assign snooper_cs = klspi_cs_3;
-    assign snooper_mosi = klspi_mosi3;
-    assign snooper_miso = klspi_miso3;
+    Figure out the difference with these two 
+    <pre>
 
-    ftdi_spi_hook ONE_BITSY(
-        .clk(clk),
-        .rst(rst),
-        .spi1_cs(bitsy_cs),
-        .spi1_mosi(bitsy_mosi),
-        .spi1_miso(bitsy_miso), 
-        .spi1_clock(bitsy_clk),
-        .spi1_isdone(isdone),
-        .spi1_tohost(tx_spi_byte),      //TO HOST COMPUTER
-        .spi1_fromhost(from_computer)   //FROM HOST COMPUTER
+    /*
+    reg [24:0] counter_d, counter_q;
+
+    always @(counter_q) begin
+        counter_d = counter_q + 1'b1;
+    end
+
+    always @(posedge clk) begin
+        if (rst) begin
+            counter_q <= 25'b0;
+    	end else begin
+            counter_q <= counter_d;
+        end
+    end
+
+    assign led = counter_q[24:17];
+    */
+
+    ////////////////////////
+
+    /*
+    reg [24:0] counter;
+    always @(posedge clk) begin
+        counter = counter + 1'b1;
+    end
+
+    assign led = counter[24:17];
+    */
+
+    </pre>
+
+    This is NOT a true flip flop, but it is similar. This is a 1 BIT REGISTER!
+    The difference is that it is 0, or 1 rolling over infinitely.
+    A real flip flop would have each STATE stored in a register
+
+    Divide clock in half 
+    <pre>
+    `timescale 1ns / 1ps
+
+    module clk_div(
+      input  in_clk,
+      input  rst,
+      output out_clk
+      );
+      
+     reg    out_clk;
+     
+    always @(posedge in_clk) begin
+      //if (!rst) begin //works but only when reset is pushed!
+      if (rst) begin  
+        out_clk <= 1'b0;
+      end
+      else 
+        out_clk <= ~out_clk;
+    end
+    endmodule
+    </pre>
+
+    div by two = simplified
+    <pre>
+    always @(posedge in_clk) 
+      begin
+        out_clk <= ~out_clk;
+      end
+    </pre>
+
+    <pre>
+    module mojo_top(
+    ..............
+    clk_div divy(
+        .in_clk(clk),
+        .out_clk(led[1]),
+        .rst(rst)
     );
 
-</pre>
-
-=== wire to module and back to wire ===
-note that Dout is a REGISTER wired to a wire
-<pre>
-wire [7:0] bufbyte;
-
-
-shift_reg_2 mysr (
-     .....
-    .Dout(bufbyte),
-     .....            
-);
-assign led = bufbyte;
-</pre>
-
-=== module -> wire -> reg -> back to wire===
-<pre>
-wire [7:0] bufbyte;
-reg [7:0] bufbyte2;
-
-shift_reg_2 mysr (
-    .....
-    .Dout(bufbyte), //register type output in modules always block
-    .....
-            
-);
-
-always @* begin
-    bufbyte2 <= bufbyte;
-end
-
-assign led = bufbyte2; //wire on LEFT side
-</pre>
-
-===Clocking/Default values===
-Implicit "Case" or "if" latch when incomplete
-<pre>
-A latch is inferred in a combinatorial block where the net is not assigned to a known value.
-ALWAYS MAKE A DEFAULT VALUE FOR CASE!!
-</pre>
-
-case statements should have a default condition.
-if statements should have a corresponding else.
-<pre>
-default:d=c;
-</pre>
-
-<pre>
-always @(a or b) // inferred latch :: "c" missing for the list.
-begin
-  out = a + b + c;
-end
-</pre>
-
-
-
-===generate===
-<pre>
-  genvar i;
-  generate
-    for (i = 0; i < 8; i=i+1) begin: NAMEOFLOOP
-      ###DO SOEMTHIG WITH "i"
-    end
-  endgenerate
-</pre>
-
-===state machines===
-<pre>
-Mealy State Machine : Its output depends on current state and current inputs. 
-</pre>
-<pre>
-Moore State Machine : Its output depends on current state only. 
-</pre>
-
-
-my first simple state machine 
-<pre>
-//roll a bit counter for visual effect
-reg [24:0] counter;
-always @(posedge clk) begin
-    counter = counter + 1'b1;
-end
-
-//define the possible states 
-parameter STATE1 = 8'h01, 
-          STATE2 = 8'h02;
-
-
-//the state control logic 
-always @* begin
-    if (rx_spi_byte==STATE1) begin 
-        led_buffer2 <= 8'haa; 
-    end 
-    if (rx_spi_byte==STATE2) begin 
-        led_buffer2 <= counter[24:17]; 
-    end
-end
-
-//show the output
-assign led = led_buffer2;
-</pre>
-
-==<b>Encoding/Protocols</b>==
-
-===SPI===
-<pre>
-CPOL stands for Clock POLarity and designates the default value (high/low) of the SCK signal when the bus is idle. 
-CPHA stands for Clock PHAse and determines which edge of the clock data is sampled (rising/falling). 
-
-#The most common settings are CPOL=0 (idle low) and CPHA=0 (sample rising edge).
-
-At CPOL=0 the base value of the clock is zero
-For CPHA=0, data are captured on the clock's rising edge (low→high transition) and data are propagated on a falling edge (high→low clock transition).
-For CPHA=1, data are captured on the clock's falling edge and data are propagated on a rising edge.
-At CPOL=1 the base value of the clock is one (inversion of CPOL=0)
-For CPHA=0, data are captured on clock's falling edge and data are propagated on a rising edge.
-For CPHA=1, data are captured on clock's rising edge and data are propagated on a falling edge.
-</pre>
-
-==<b>Verilog Examples</b>==
-
-===AND gate ===
-
-and primitive - with concatenation
-<pre>
-assign foo = 1'b0;
-assign bar = 1'b1;
-
-and foonet (out, foo, bar );
-
-assign led = {
-               bufbyte[7:2],
-               out,
-               1'b1
-             
-             };
-</pre>
-
-
-and gate in a module
-<pre>
-module andgate (a, b, y);
-  input a, b;
-  output y;
-  assign y = a & b;
-endmodule
-</pre>
-
-===import external verilog module===
-https://embeddedmicro.com/tutorials/mojo/synchronous-logic
-
-blinker.v (verilog)
-<pre>
-module blinker(
-    input clk,
-    input rst,
-    output blink
-  );
-   
-  reg [24:0] counter_d, counter_q;
-   
-  assign blink = counter_q[24];
-   
-  always @(counter_q) begin
-    counter_d = counter_q + 1'b1;
-  end
- 
-  always @(posedge clk) begin
-    if (rst) begin
-      counter_q <= 25'b0;
-    end else begin
-      counter_q <= counter_d;
-    end
-  end
-endmodule
-</pre>
-
-
-<pre>
-module mojo_top(
-  
-  ..........
-
-  blinker awesome_blinker (
-    .clk(clk),
-    .rst(rst),
-    .blink(led[0])
-  );
-   
-endmodule
-
-</pre>
-
-===I/O example=== 
-//https://embeddedmicro.com/tutorials/lucid/external-io-tutorial
-<pre>
-module mojo_top(
-    .........
-    input button            // Super cool button!
-);
-</pre>
-UCF file addition
-<pre>
-NET "button" LOC = P51 | IOSTANDARD = LVTTL | PULLUP;
-</pre>
-<pre>
-assign led[7] = ~button;       // connect the button
-</pre>
-
-
-===intermediate signal===
-
-<pre>
-wire[7:0] blink; //this is the intermediate 
-
-reg [24:0] counter_d, counter_q;
-
-assign blink = {8{counter_q[24]}};
-
-always @(counter_q) begin
-    counter_d = counter_q + 1'b1;
-end
-always @(posedge clk) begin
-    if (rst) begin
-        counter_q <= 25'b0;
-    end else begin
-        counter_q <= counter_d;
-    end
-end
-
-assign led[3:0] = blink[3:0] ; 
-assign led[7:4] = ~blink[7:4] ; 
-
-
-</pre>
-
-===wire two modules together===
-
-<pre>
-module intermed_wire(
-    input in_1,
-    input in_2,
-    input in_3,    
-    output out_1,
-    output out_2
-);
-  wire intermediate_sig;
-  assign intermediate_sig = in_1 & in_2;
-  assign out_1 = intermediate_sig & in_3;
-  assign out_2 = intermediate_sig | in_3;
-endmodule
-</pre>
-
-<pre>
-module mojo_top()
-  ........
-wire boobaz;
-
-blinker awesome_blinker (
-    .clk(clk),
-    .rst(foobar),
-    .blink(boobaz)
-  );
-
-assign led[0] = boobaz;
-
-intermed_wire iwyre (
-   .in_1(boobaz),
-   .in_2(boobaz),
-   .in_3(boobaz),
-   .out_1(led[2]),
-   .out_2(led[3])	 
-);
-
-endmodule
-</pre>
-
-
-===FlipFLop===
-
-Figure out the difference with these two 
-<pre>
-
-/*
-reg [24:0] counter_d, counter_q;
-
-always @(counter_q) begin
-    counter_d = counter_q + 1'b1;
-end
-
-always @(posedge clk) begin
-    if (rst) begin
-        counter_q <= 25'b0;
-	end else begin
-        counter_q <= counter_d;
-    end
-end
-
-assign led = counter_q[24:17];
-*/
-
-////////////////////////
-
-/*
-reg [24:0] counter;
-always @(posedge clk) begin
-    counter = counter + 1'b1;
-end
-
-assign led = counter[24:17];
-*/
-
-</pre>
-
-This is NOT a true flip flop, but it is similar. This is a 1 BIT REGISTER!
-The difference is that it is 0, or 1 rolling over infinitely.
-A real flip flop would have each STATE stored in a register
-
-Divide clock in half 
-<pre>
-`timescale 1ns / 1ps
-
-module clk_div(
-  input  in_clk,
-  input  rst,
-  output out_clk
-  );
-  
- reg    out_clk;
- 
-always @(posedge in_clk) begin
-  //if (!rst) begin //works but only when reset is pushed!
-  if (rst) begin  
-    out_clk <= 1'b0;
-  end
-  else 
-    out_clk <= ~out_clk;
-end
-endmodule
-</pre>
-
-div by two = simplified
-<pre>
-always @(posedge in_clk) 
-  begin
-    out_clk <= ~out_clk;
-  end
-</pre>
-
-<pre>
-module mojo_top(
-..............
-clk_div divy(
-    .in_clk(clk),
-    .out_clk(led[1]),
-    .rst(rst)
-);
-
-endmodule
-
-</pre>
-
-
-
-<pre>
-  //-------------Code Starts Here---------
-  always @ ( posedge clk or negedge reset)
-  if (~reset) begin
-    q <= 1'b0;
-  end  else begin
-    q <= data;
-  end
-  
-  endmodule //End Of Module dff_async_reset
-</pre>
-
-
-This is a TRUE flip flop because it stores each state (D and Q)
-<pre>
-  reg [4:0] counter_d, counter_q; 
-   
-  //assign blink = counter_q[4]; // you can assign portions to 1 bit wires
-   
-  always @(counter_q) begin
-    counter_d = counter_q + 1'b1;
-  end
-   
-  always @(posedge clk) begin
-    if (rst) begin
-      counter_q <= 5'b0;
-    end else begin
-      counter_q <= counter_d;
-    end
-  end
-</pre>
-
-===8 bit counter===
-<pre>
-`timescale 1ns / 1ps
-
-module counter  (
-     output [7:0] out,
-     input enable, 
-     input clk, 
-     input reset
- );
-
- reg [7:0] out; //specify this is a register, works in concert with defined output
-
- always @(posedge clk)
- if (reset) begin
-   out <= 8'b0 ;
- end else if (enable) begin
-   out <= out + 1;
- end
-
-endmodule
-</pre>
-
-
-===case -> reg -> wire===
-
-<pre>
-wire [7:0] bufbyte;
-reg [7:0] bufbyte2;
-
-shift_reg_2 mysr (
-    .....
-    .Dout(bufbyte), //reg type in always block output
-    .....            
-);
-
-always @* begin
-    case (bufbyte)
-      8'b0000001: bufbyte2 = 8'b10101111;
-      8'b0000010: bufbyte2 = 8'b11110000;
-      8'b0000011: bufbyte2 = 8'b11001100;            
-      default: bufbyte2 = 8'b00000000;
-    endcase
-end
-
-assign led = bufbyte2; //wire on LEFT side
-</pre>
-
-
-===conditional inside always block===
-<pre>
-wire [7:0] bufbyte;
-reg [7:0] bufbyte2;
-
-shift_reg_2 mysr (
-    .....
-    .Dout(bufbyte),
-    .....
-  
-);
-
-always @* begin
-    if (bufbyte < 8'b00001000) begin
-         bufbyte2 <= 8'b11110000;
-    end
-
-    if (bufbyte > 8'b00001000) begin
-         bufbyte2 <= 8'b00001111;
-    end
-end
-
-assign led = bufbyte2;
-</pre>
-
-=== clock divider and 8 bit counter ===
-<pre>
-module mojo_top(
-    input clk,
-    input rst_n, // Input from reset button (active low)
-    input cclk, // cclk input from AVR, high when AVR is ready
-    input [7:0]kgl,
-
-    output[7:0]led,
-    // AVR SPI connections
-    output spi_miso,
-    input spi_ss,
-    input spi_mosi,
-    input spi_sck,
-    // AVR ADC channel select
-    output [3:0] spi_channel,
-    // Serial connections
-    input avr_tx, // AVR Tx => FPGA Rx
-    output avr_rx, // AVR Rx => FPGA Tx
-    input avr_rx_busy // AVR Rx buffer full
+    endmodule
+
+    </pre>
+
+
+
+    <pre>
+      //-------------Code Starts Here---------
+      always @ ( posedge clk or negedge reset)
+      if (~reset) begin
+        q <= 1'b0;
+      end  else begin
+        q <= data;
+      end
+      
+      endmodule //End Of Module dff_async_reset
+    </pre>
+
+
+    This is a TRUE flip flop because it stores each state (D and Q)
+    <pre>
+      reg [4:0] counter_d, counter_q; 
+       
+      //assign blink = counter_q[4]; // you can assign portions to 1 bit wires
+       
+      always @(counter_q) begin
+        counter_d = counter_q + 1'b1;
+      end
+       
+      always @(posedge clk) begin
+        if (rst) begin
+          counter_q <= 5'b0;
+        end else begin
+          counter_q <= counter_d;
+        end
+      end
+    </pre>
+
+    ===8 bit counter===
+    <pre>
+    `timescale 1ns / 1ps
+
+    module counter  (
+         output [7:0] out,
+         input enable, 
+         input clk, 
+         input reset
+     );
+
+     reg [7:0] out; //specify this is a register, works in concert with defined output
+
+     always @(posedge clk)
+     if (reset) begin
+       out <= 8'b0 ;
+     end else if (enable) begin
+       out <= out + 1;
+     end
+
+    endmodule
+    </pre>
+
+
+    ===case -> reg -> wire===
+
+    <pre>
+    wire [7:0] bufbyte;
+    reg [7:0] bufbyte2;
+
+    shift_reg_2 mysr (
+        .....
+        .Dout(bufbyte), //reg type in always block output
+        .....            
     );
 
-wire rst = ~rst_n; // make reset active high
-
-// these signals should be high-z when not used
-assign spi_miso = 1'bz;
-assign avr_rx = 1'bz;
-assign spi_channel = 4'bzzzz;
-
-
-/********/
-//CLOCK DIVIDER
-
-wire blink;
-
-reg [24:0] counter_d, counter_q;
-
-//assign blink = {8{counter_q[24]}};
-assign blink = counter_q[24];
-
-
-always @(counter_q) begin
-    counter_d = counter_q + 1'b1;
-end
-always @(posedge clk) begin
-    if (rst) begin
-        counter_q <= 25'b0;
-    end else begin
-        counter_q <= counter_d;
+    always @* begin
+        case (bufbyte)
+          8'b0000001: bufbyte2 = 8'b10101111;
+          8'b0000010: bufbyte2 = 8'b11110000;
+          8'b0000011: bufbyte2 = 8'b11001100;            
+          default: bufbyte2 = 8'b00000000;
+        endcase
     end
-end
 
-/********************************/
-//8 bit counter
-
-wire enable = 1'b1;
-
-reg[7:0] foo_out;
-
- always @(posedge blink)
- if (rst) begin
-   foo_out <= 8'b0 ;
- end else if (enable) begin
-   foo_out <= foo_out + 1;
- end
-
-assign led = foo_out; 
-
-endmodule
-</pre>
+    assign led = bufbyte2; //wire on LEFT side
+    </pre>
 
 
-/********************************/
-===bidirectional pins===
+    ===conditional inside always block===
+    <pre>
+    wire [7:0] bufbyte;
+    reg [7:0] bufbyte2;
 
-<pre>
-module bidirec (oe, clk, inp, outp, bidir);
+    shift_reg_2 mysr (
+        .....
+        .Dout(bufbyte),
+        .....
+      
+    );
 
-    // Port Declaration
-    input   oe;
-    input   clk;
-    input   [7:0] inp;
-    output  [7:0] outp;
-    inout   [7:0] bidir;
-    reg     [7:0] a;
-    reg     [7:0] b;
-    assign bidir = oe ? a : 8'bZ ;
-    assign outp  = b;
+    always @* begin
+        if (bufbyte < 8'b00001000) begin
+             bufbyte2 <= 8'b11110000;
+        end
 
-    always @ (posedge clk)
-    begin
-        b <= bidir;
-        a <= inp;
+        if (bufbyte > 8'b00001000) begin
+             bufbyte2 <= 8'b00001111;
+        end
     end
-endmodule
-</pre>
 
-===Shift Registers===
+    assign led = bufbyte2;
+    </pre>
+
+    === clock divider and 8 bit counter ===
+    <pre>
+    module mojo_top(
+        input clk,
+        input rst_n, // Input from reset button (active low)
+        input cclk, // cclk input from AVR, high when AVR is ready
+        input [7:0]kgl,
+
+        output[7:0]led,
+        // AVR SPI connections
+        output spi_miso,
+        input spi_ss,
+        input spi_mosi,
+        input spi_sck,
+        // AVR ADC channel select
+        output [3:0] spi_channel,
+        // Serial connections
+        input avr_tx, // AVR Tx => FPGA Rx
+        output avr_rx, // AVR Rx => FPGA Tx
+        input avr_rx_busy // AVR Rx buffer full
+        );
+
+    wire rst = ~rst_n; // make reset active high
+
+    // these signals should be high-z when not used
+    assign spi_miso = 1'bz;
+    assign avr_rx = 1'bz;
+    assign spi_channel = 4'bzzzz;
 
 
-Shift register basic
-negative-edge clock, clock enable, serial in, and serial out.
-<pre>
-module shift (C, CE, SI, SO); 
-input C,SI, CE; 
-output SO; 
-reg [7:0] tmp; 
- 
-  always @(negedge C) 
-    begin 
-      if (CE) 
+    /********/
+    //CLOCK DIVIDER
+
+    wire blink;
+
+    reg [24:0] counter_d, counter_q;
+
+    //assign blink = {8{counter_q[24]}};
+    assign blink = counter_q[24];
+
+
+    always @(counter_q) begin
+        counter_d = counter_q + 1'b1;
+    end
+    always @(posedge clk) begin
+        if (rst) begin
+            counter_q <= 25'b0;
+        end else begin
+            counter_q <= counter_d;
+        end
+    end
+
+    /********************************/
+    //8 bit counter
+
+    wire enable = 1'b1;
+
+    reg[7:0] foo_out;
+
+     always @(posedge blink)
+     if (rst) begin
+       foo_out <= 8'b0 ;
+     end else if (enable) begin
+       foo_out <= foo_out + 1;
+     end
+
+    assign led = foo_out; 
+
+    endmodule
+    </pre>
+
+
+    /********************************/
+    ===bidirectional pins===
+
+    <pre>
+    module bidirec (oe, clk, inp, outp, bidir);
+
+        // Port Declaration
+        input   oe;
+        input   clk;
+        input   [7:0] inp;
+        output  [7:0] outp;
+        inout   [7:0] bidir;
+        reg     [7:0] a;
+        reg     [7:0] b;
+        assign bidir = oe ? a : 8'bZ ;
+        assign outp  = b;
+
+        always @ (posedge clk)
+        begin
+            b <= bidir;
+            a <= inp;
+        end
+    endmodule
+    </pre>
+
+    ===Shift Registers===
+
+
+    Shift register basic
+    negative-edge clock, clock enable, serial in, and serial out.
+    <pre>
+    module shift (C, CE, SI, SO); 
+    input C,SI, CE; 
+    output SO; 
+    reg [7:0] tmp; 
+     
+      always @(negedge C) 
         begin 
-          tmp = tmp << 1; 
-          tmp[0] = SI; 
+          if (CE) 
+            begin 
+              tmp = tmp << 1; 
+              tmp[0] = SI; 
+            end 
+        end 
+        assign SO  = tmp[7]; 
+    endmodule 
+
+    </pre>
+
+    modified example above as a half duplex SPI interface
+    working SPI example! (sent from a bus pirate , a 3V device so no buffer needed!
+    <pre>
+    `timescale 1ns / 1ps
+
+    module spi_shiftreg (clk, CE, SI, SO); 
+    input clk,SI, CE; 
+
+    output [7:0] SO; 
+
+    reg [7:0] tmp; 
+     
+    always @(negedge clk) 
+    begin 
+        if (CE==1'b0) //CS line low to transmit a byte 
+        begin 
+            tmp = tmp << 1; //shift bit in on each low falling edge of clock  
+            tmp[0] = SI;    //set first bit to get shifted (on next falling edge clock cycle)
         end 
     end 
-    assign SO  = tmp[7]; 
-endmodule 
+    assign SO  = tmp;
 
-</pre>
+    endmodule 
+    </pre>
 
-modified example above as a half duplex SPI interface
-working SPI example! (sent from a bus pirate , a 3V device so no buffer needed!
-<pre>
-`timescale 1ns / 1ps
+    UCF pin mapping (any FPGA pins should work)
+    <pre>
+    NET "klspi_cs"   LOC = P50 | IOSTANDARD = LVTTL;  #bus pirate pin 9/CS
+    NET "klspi_clk"  LOC = P51 | IOSTANDARD = LVTTL;  #bus pirate pin 7/clock
+    NET "klspi_mosi" LOC = P40 | IOSTANDARD = LVTTL;  #bus pirate pin 8/mosi
+    </pre>
 
-module spi_shiftreg (clk, CE, SI, SO); 
-input clk,SI, CE; 
+    <pre>
 
-output [7:0] SO; 
-
-reg [7:0] tmp; 
- 
-always @(negedge clk) 
-begin 
-    if (CE==1'b0) //CS line low to transmit a byte 
-    begin 
-        tmp = tmp << 1; //shift bit in on each low falling edge of clock  
-        tmp[0] = SI;    //set first bit to get shifted (on next falling edge clock cycle)
-    end 
-end 
-assign SO  = tmp;
-
-endmodule 
-</pre>
-
-UCF pin mapping (any FPGA pins should work)
-<pre>
-NET "klspi_cs"   LOC = P50 | IOSTANDARD = LVTTL;  #bus pirate pin 9/CS
-NET "klspi_clk"  LOC = P51 | IOSTANDARD = LVTTL;  #bus pirate pin 7/clock
-NET "klspi_mosi" LOC = P40 | IOSTANDARD = LVTTL;  #bus pirate pin 8/mosi
-</pre>
-
-<pre>
-
-....
-spi_shiftreg mysr (
-    .clk(klspi_clk),
-    .SO(led),
-    .SI(klspi_mosi),
-    .CE(klspi_cs)
-            
-);
-.....
-</pre>
+    ....
+    spi_shiftreg mysr (
+        .clk(klspi_clk),
+        .SO(led),
+        .SI(klspi_mosi),
+        .CE(klspi_cs)
+                
+    );
+    .....
+    </pre>
 
 
-//modified from example at 
-//http://www.csit-sun.pub.ro/courses/Masterat/Xilinx%20Synthesis%20Technology/toolbox.xilinx.com/docsan/xilinx4/data/docs/xst/hdlcode8.html
+    //modified from example at 
+    //http://www.csit-sun.pub.ro/courses/Masterat/Xilinx%20Synthesis%20Technology/toolbox.xilinx.com/docsan/xilinx4/data/docs/xst/hdlcode8.html
 
-<pre>
-`timescale 1ns / 1ps
+    <pre>
+    `timescale 1ns / 1ps
 
-// 8-bit register can be cleared, loaded, shifted left
-// Retains value if no control signal is asserted
+    // 8-bit register can be cleared, loaded, shifted left
+    // Retains value if no control signal is asserted
 
-module shift_reg_2 (clk, clr, shift, ld, Din, SI, Dout);
-	input clk;
-	input clr; // clear register 
-	
-	input shift;
-	input ld;        // load register from Din
-	input [7:0] Din; // Data input for load
-	input SI;        // Input bit to shift in
+    module shift_reg_2 (clk, clr, shift, ld, Din, SI, Dout);
+    	input clk;
+    	input clr; // clear register 
+    	
+    	input shift;
+    	input ld;        // load register from Din
+    	input [7:0] Din; // Data input for load
+    	input SI;        // Input bit to shift in
 
-	output [7:0] Dout;
-	reg	[7:0] Dout;
+    	output [7:0] Dout;
+    	reg	[7:0] Dout;
 
-	always @(posedge clk) 
-	begin
-		if (clr)
-			Dout <= 0;
-		else if (ld)
-			Dout <= Din;
-		else if (shift)
-			Dout <= { Dout[6:0], SI }; //lower 7 bits moved with new bit added 
-	end
-endmodule
-</pre>
+    	always @(posedge clk) 
+    	begin
+    		if (clr)
+    			Dout <= 0;
+    		else if (ld)
+    			Dout <= Din;
+    		else if (shift)
+    			Dout <= { Dout[6:0], SI }; //lower 7 bits moved with new bit added 
+    	end
+    endmodule
+    </pre>
 
-<pre>
-...
-assign doclear = 1'b0;
-assign doshift = 1'b1;
-assign doload  = 1'b0;
+    <pre>
+    ...
+    assign doclear = 1'b0;
+    assign doshift = 1'b1;
+    assign doload  = 1'b0;
 
-assign dummybyte = 8'b00110101;
+    assign dummybyte = 8'b00110101;
 
 
-shift_reg_2 mysr (
-    .clk(klspi_clk),
-    .clr(doclear),
-    .shift(doshift),
-    .Dout(led),
-    .ld(doload),
-    .Din(dummybyte),
-    .SI(klspi_mosi)
-            
-);
-...
-</pre>
+    shift_reg_2 mysr (
+        .clk(klspi_clk),
+        .clr(doclear),
+        .shift(doshift),
+        .Dout(led),
+        .ld(doload),
+        .Din(dummybyte),
+        .SI(klspi_mosi)
+                
+    );
+    ...
+    </pre>
 
 
 
 
-<pre>
-</pre>
+    <pre>
+    </pre>
 
-==<b>Spartan6 hardware</b>==
-<pre>
-  Mojo uses a Spartan 6 XC6SLX9 FPGA. I have been too scared to look at the datasheet for it.
-  MAX INPUT VOLTAGE IS 4 VOLTS! Welcome to the world of 3 volt TTL.
-</pre>
+    ==<b>Spartan6 hardware</b>==
+    <pre>
+      Mojo uses a Spartan 6 XC6SLX9 FPGA. I have been too scared to look at the datasheet for it.
+      MAX INPUT VOLTAGE IS 4 VOLTS! Welcome to the world of 3 volt TTL.
+    </pre>
 
-===FPGA primitives===
+    ===FPGA primitives===
 
-The FPGA can't route a clock signal directly to an output pin.
+    The FPGA can't route a clock signal directly to an output pin.
 
-The clock and general logic of an FPGA share different routing resources and there isn't a way for the clock signal to 
-move back into the general routing system. You can use an ODDR2 primitive to compensate for this.
+    The clock and general logic of an FPGA share different routing resources and there isn't a way for the clock signal to 
+    move back into the general routing system. You can use an ODDR2 primitive to compensate for this.
 
-<pre>
-The ODDR2 is a component in the output driver for the pin. 
-output changes to the value of D0 with a rising edge of C0 and changes to the value of D1 with the rising edge of C1. 
-You can set D0 to 1'b1 and D0 to 1'b0. 
-R and S can both be tied off to 1'b0, while CE can be set to 1'b1. 
-C0 should be connected Clk_100MHz
-C1 should be set to ~Clk_100MHz  
-Q should be connected directly to clk_out.
---------------
-D0 = 1'b1
-D1 = 1'b0
-R = 1'b0
-S = 1'b0
-CE = 1'b1
-C0 = clk100m
-C1 = ~clk100m
-Q = clk_out
-</pre>
+    <pre>
+    The ODDR2 is a component in the output driver for the pin. 
+    output changes to the value of D0 with a rising edge of C0 and changes to the value of D1 with the rising edge of C1. 
+    You can set D0 to 1'b1 and D0 to 1'b0. 
+    R and S can both be tied off to 1'b0, while CE can be set to 1'b1. 
+    C0 should be connected Clk_100MHz
+    C1 should be set to ~Clk_100MHz  
+    Q should be connected directly to clk_out.
+    --------------
+    D0 = 1'b1
+    D1 = 1'b0
+    R = 1'b0
+    S = 1'b0
+    CE = 1'b1
+    C0 = clk100m
+    C1 = ~clk100m
+    Q = clk_out
+    </pre>
 
-===clock buffering===
+    ===clock buffering===
 
 
-<pre>
-A global buffer distributes high fanout signals throughout a device. 
-types of global clock buffers: BUFG, BUFGCE, BUFGDLL, BUFGMUX, BUFGP, BUFGCTRL, and BUFGMUX_CTRL.
-</pre>
+    <pre>
+    A global buffer distributes high fanout signals throughout a device. 
+    types of global clock buffers: BUFG, BUFGCE, BUFGDLL, BUFGMUX, BUFGP, BUFGCTRL, and BUFGMUX_CTRL.
+    </pre>
 
-clkout1 is the clock that you are driving out  
-clkout1_n is the inverse of the clkout1 (clkout1 with 180° phase shift) 
+    clkout1 is the clock that you are driving out  
+    clkout1_n is the inverse of the clkout1 (clkout1 with 180° phase shift) 
 
-<pre>
-module mojo_top(
-    // 50MHz clock input
-    input clk,
-    // Input from reset button (active low)
-    input rst_n,
-    // cclk input from AVR, high when AVR is ready
-    input cclk,
-    // Outputs to the 8 onboard LEDs
-    output[7:0]led,
-    // AVR SPI connections
-    output spi_miso,
-    input spi_ss,
-    input spi_mosi,
-    input spi_sck,
-    // AVR ADC channel select
-    output [3:0] spi_channel,
-    // Serial connections
-    input avr_tx, // AVR Tx => FPGA Rx
-    output avr_rx, // AVR Rx => FPGA Tx
-    input avr_rx_busy // AVR Rx buffer full
+    <pre>
+    module mojo_top(
+        // 50MHz clock input
+        input clk,
+        // Input from reset button (active low)
+        input rst_n,
+        // cclk input from AVR, high when AVR is ready
+        input cclk,
+        // Outputs to the 8 onboard LEDs
+        output[7:0]led,
+        // AVR SPI connections
+        output spi_miso,
+        input spi_ss,
+        input spi_mosi,
+        input spi_sck,
+        // AVR ADC channel select
+        output [3:0] spi_channel,
+        // Serial connections
+        input avr_tx, // AVR Tx => FPGA Rx
+        output avr_rx, // AVR Rx => FPGA Tx
+        input avr_rx_busy // AVR Rx buffer full
+        );
+
+    wire rst = ~rst_n; // make reset active high
+
+    // these signals should be high-z when not used
+    assign spi_miso = 1'bz;
+    assign avr_rx = 1'bz;
+    assign spi_channel = 4'bzzzz;
+
+
+    wire clkout1;
+
+    ODDR2 #(
+       // The following parameters specify the 
+       // behavior of the component.
+       .DDR_ALIGNMENT("NONE"), // Sets output alignment
+                               // to "NONE", "C0" or "C1"
+       .INIT(1'b0),            // Sets initial state of the Q 
+                               // output to 1'b0 or 1'b1
+       .SRTYPE("SYNC")         // Specifies "SYNC" or "ASYNC"
+                               // set/reset
+    )
+    ODDR2_inst (
+       .Q(clkout1),    // 1-bit DDR output data
+       .C0(clk),       // 1-bit clock input
+       .C1(~clk),      // 1-bit clock input
+       .CE(1'b1),       // 1-bit clock enable input
+       .D0(1'b1),      // 1-bit data input (associated with C0)
+       .D1(1'b0),      // 1-bit data input (associated with C1)
+       .R(1'b0),       // 1-bit reset input
+       .S(1'b0)        // 1-bit set input
     );
 
-wire rst = ~rst_n; // make reset active high
+    /*************************************/
 
-// these signals should be high-z when not used
-assign spi_miso = 1'bz;
-assign avr_rx = 1'bz;
-assign spi_channel = 4'bzzzz;
+    assign led[7:0] = clkout1;
 
+    endmodule
+    </pre>
 
-wire clkout1;
 
-ODDR2 #(
-   // The following parameters specify the 
-   // behavior of the component.
-   .DDR_ALIGNMENT("NONE"), // Sets output alignment
-                           // to "NONE", "C0" or "C1"
-   .INIT(1'b0),            // Sets initial state of the Q 
-                           // output to 1'b0 or 1'b1
-   .SRTYPE("SYNC")         // Specifies "SYNC" or "ASYNC"
-                           // set/reset
-)
-ODDR2_inst (
-   .Q(clkout1),    // 1-bit DDR output data
-   .C0(clk),       // 1-bit clock input
-   .C1(~clk),      // 1-bit clock input
-   .CE(1'b1),       // 1-bit clock enable input
-   .D0(1'b1),      // 1-bit data input (associated with C0)
-   .D1(1'b0),      // 1-bit data input (associated with C1)
-   .R(1'b0),       // 1-bit reset input
-   .S(1'b0)        // 1-bit set input
-);
+    ===input buffering===
 
-/*************************************/
+    <pre>
+    IBUF - buffer from external signal
+    BUF - buffer from internal signal
+    </pre>
 
-assign led[7:0] = clkout1;
+    <pre>
+    /********************************/
+    wire YOUR_OUTPUT_SIGNAL;
 
-endmodule
-</pre>
-
-
-===input buffering===
-
-<pre>
-IBUF - buffer from external signal
-BUF - buffer from internal signal
-</pre>
-
-<pre>
-/********************************/
-wire YOUR_OUTPUT_SIGNAL;
-
-IBUF #(
-  .IBUF_LOW_PWR("TRUE"),   // Low power (TRUE) vs. performance (FALSE) setting for referenced I/O standards
-  .IOSTANDARD("DEFAULT")   // Specify the input I/O standard
-)
-  IBUF_inst (
-  .O(YOUR_OUTPUT_SIGNAL),  // Buffer output
-  .I(FROM_YOUR_IN_PORT)    // Buffer input (connect directly to top-level port)
-);
-
-</pre>
-
-
-<pre>
-An input pin (signal) is buffered -you may not use the input pin signal anywhere else but the buffer input.
- 
-
-PAD           IBUF buffer
-
-+--+   IN_SIG     |\   BFR_SIG
-
-|  |------+------>| >-------------> (legal connections)
-
-+--+      |       |/
-
-          |  
-
-          +----> (illegal connections!)
-</pre>
-
-<pre>
-Input MUXes select the reference and feedback clocks from either the IBUFG, BUFG, IBUF, 
-PLL outputs, or one of the DCMs.
-</pre>
-
-===timing, clock buffers, etc===
-
-Timing is probably the most confusing part about FPGA to me.
-
-If you are coming from a traditional software background, you probably think sequentially. 
-With FPGA things are all happening at about the same time, unless you make it otherwise. 
-
-The technique seems to be to use a register to count clock cycles and then do something.
-You have to use input/output signalling to start operations.
-
-You can use the #CLOCK shorthand , but I haven't tried this yet. (Simulation only?) 
-
-
-D/Q Flop VS simple register.
-<pre>
-</pre>
-
-
-//Synchronous clock
-<pre>
- always @ ( posedge clk)
-     ... do something ...
-  end
-</pre>
-
-// Asynchronous clock
-<pre>
- always @ ( posedge clk or negedge reset)
-     ... do something ...
- end 
-</pre>
- 
-
-links
-<pre>
-http://www.xilinx.com/support/documentation/user_guides/ug382.pdf
-</pre>
-
-
-<pre>
-clock frequency is 50MHz, or 50,000,000 clock cycles per second. 
-counter takes 2^25 cycles to overflow we can calculate the blinker time
-2^25 / 50,000,000 -- on and off every 0.67 seconds.
-</pre>
-
-===timing terminology===
-<pre>
-IBUFG    - drives a global clock net from an external pin.
-BUFG     - drives a global clock net from an internal signal. 
-
-DCM      - design primitive - digital clock manager, an electronic component available on some FPGAs
-DCM_SP   - design primitive - read the datasheet, good luck kid
-PLL      - phase locked loop
-DLL      - delay locked loop
-</pre>
-
-
-
-===Timing Errors===
-
-<pre>
-This design contains a global buffer instance,
-   <vclk/clkout1_buf>, driving the net, <led_7_OBUF>, that is driving the
-   following (first 30) non-clock load pins.
-
-This is not a recommended design practice in Spartan-6 due to limitations in
-   the global routing that may cause excessive delay, skew or unroutable
-   situations.  It is recommended to only use a BUFG resource to drive clock
-   loads. If you wish to override this recommendation, you may use the
-   CLOCK_DEDICATED_ROUTE constraint (given below) in the .ucf file to demote
-   this message to a WARNING and allow your design to continue.
-</pre>
-
-
-CLOCK_DEDICATED_ROUTE (for clocking slow pulses)
-<pre>
-NET "k4" LOC = P78 | IOSTANDARD = LVCMOS33  | CLOCK_DEDICATED_ROUTE = FALSE;
-</pre>
-
-<pre>
-http://www.xilinx.com/support/documentation/user_guides/ug381.pdf
-</pre>
-
-==<b>Simulation</b>==
-
-So I guess simulation is really, really important. 
-6 months in to this, I still haven’t simulated a single thing, I just jumped right into synthesizing actual bitfiles. 
-
-
-===Icarus===
-
-using Icarus Verilog
-<pre>
-//From http://iverilog.wikia.com/wiki/Getting_Started
-
-module main;
-  initial 
-    begin
-      $display("Hello, World");
-      $finish ;
-    end
-endmodule
-
-Use a text editor to place the program in a text file, hello.v, then compile this program with the command:
-
-% iverilog -o hello hello.v
-
-The results of this compile are placed into the file "hello", because the "-o" flag tells the compiler where to place the compiled result. 
-Next, execute the compiled program like so:
-
-% vvp hello
-
-</pre>
-
-GTKwave 
-<pre>
-in the verilog include 
-
-$dumpfile("my_file_name)
-$dumpvars(0,name??)
-
-$finish
-</pre>
-
-
-<pre>
-iverilog foo.v foo2.v -o simout 
-vvp simout  #convert to a vcs
-
-</pre>
-
-===Verilator===
-<pre>
-Kind of a weird idea. It compiles verilog into C. I think this is for speed and flexibility in simulation. 
- 
-</pre>
-
-
-Great place to start
-<pre>
-https://www.youtube.com/watch?v=HAQfD35U6-M
-</pre>
-
-==<b>programmer hardware</b>==
-Xilinx platform cable 
-<pre>
-untested because I dont want to drop 300 bucks on a tool that might not even work on linux.
-I suspect it will, or at least damn well better, but I am too cheap to find out for now
-I did buy a 30 dollar clone on ebay, and had no luck on linux. On windows the light turned green when hooked to a device but threw a bunch of errors.
-I read somewhere that it only works on 32 bit systems, so maybe that was the problem
-</pre>
-
-FT2232H - SPI/BPI- Flash programming
-<pre>
-Hmm, sounds hard. More notes here when I figure it out.
-</pre>
-
-Digilent JTAG-HS3
-Supposedly this thing will solve all my problems. 
-Drivers come with ISE on linux (I think?)
-go look at :
-<pre>
-https://elinux.org/Install_Xilinx_USB_cable_drivers_for_Ubuntu
-</pre>
-
-Basically do this:
-<pre>
-cd /<Install Path>/Xilinx/<Version Number>/ISE_DS/common/bin/lin64/digilent
-sudo ./install_digilent.sh
-</pre>
-
-After I did that it recognized my device, so looking good, but I need a damn 2mm pitch JTAG header to plug it in to anything. GGRRRR.
-
-
-===Digilent HS3===
-<pre>
-   GND   |X X| VREF 
-   GND   |X X| TMS
-   GND  _|X X| TCK
-   GND |_|X X| TDO
-   GND   |X X| TDI
-   GND   |X X| -NC
-   GND   |X_X| SRST   
-
-  (looking out of connector)
-</pre>
-
-
-==<b>Permissible stupidities</b>==
-
-Apparently Verilog just allows things that don’t make any sense, or are confusing:
-
-<b>Defining a wire in the module parameters that is not in UCF</b>
-<pre>
-module mojo_top(
-         output hpin,
-         input RESET  <----- DOES NOT EXIST IN UCF!!
+    IBUF #(
+      .IBUF_LOW_PWR("TRUE"),   // Low power (TRUE) vs. performance (FALSE) setting for referenced I/O standards
+      .IOSTANDARD("DEFAULT")   // Specify the input I/O standard
+    )
+      IBUF_inst (
+      .O(YOUR_OUTPUT_SIGNAL),  // Buffer output
+      .I(FROM_YOUR_IN_PORT)    // Buffer input (connect directly to top-level port)
     );
-</pre>
 
-<b> Implicit declaration in module instantiation</b>
-Similar - defining a wire in a module instantiation that does not exist
-
-Throws an error:
-"<px_counter> is already implicitly declared earlier"
-<pre>
-   sram_io shramio(
-	    .clk(clk),
-	    
-	    //data to interact with sram chip 
-	    .wren(dir_pin),
-	    .d(px_counter), <-- does not exist YET  
-  	    .q(data_intermed),
-	    .address(px_counter)
-   );
-    reg [9:0] px_counter = 10'b0;
-</pre>
-
-Totally valid, however: 
-<pre>
-    reg [9:0] px_counter = 10'b0;	
-    sram_io shramio(
-	    .clk(clk),
-	    
-	    //data to interact with sram chip 
-	    .wren(dir_pin),
-	    .d(px_counter), <-- does not exist YET  
-  	    .q(data_intermed),
-	    .address(px_counter)
-   );
-
-</pre>
+    </pre>
 
 
-==<b>Simulation Errors</b>==
-<pre>
-System task finish is always executed
-</pre>
+    <pre>
+    An input pin (signal) is buffered -you may not use the input pin signal anywhere else but the buffer input.
+     
 
-==<b>Error Reference</b>==
+    PAD           IBUF buffer
 
-<XXX> is already implicitly declared earlier.
-<pre>
-the order you declare things matters. Something prior to this has defined the object
-</pre>
+    +--+   IN_SIG     |\   BFR_SIG
 
+    |  |------+------>| >-------------> (legal connections)
 
-No support for synthesis of mixed edge and level triggers
-<pre>
-    dont mix data in an always block with with data in a sensitivity list  
-</pre>
+    +--+      |       |/
 
-is sourced by a combinatorial pin. This is not good design practice. Use the CE pin to
-control the loading of data into the flip-flop.
+              |  
 
-<pre>
- signal is the output from a flip flop, rather than a nice clean external clock signal, the tools are warning you ???
-</pre>
+              +----> (illegal connections!)
+    </pre>
 
+    <pre>
+    Input MUXes select the reference and feedback clocks from either the IBUFG, BUFG, IBUF, 
+    PLL outputs, or one of the DCMs.
+    </pre>
 
-concurrent assignment or output port connection should be a net type
-<pre>
-you cannot drive a reg type via a continuous assignment (only a wire may be driven in this way)
-</pre>
+    ===timing, clock buffers, etc===
 
+    Timing is probably the most confusing part about FPGA to me.
 
-Non-net port out_byte cannot be of mode input
-<pre>
-dont declare your input as a reg 
-</pre>
+    If you are coming from a traditional software background, you probably think sequentially. 
+    With FPGA things are all happening at about the same time, unless you make it otherwise. 
+
+    The technique seems to be to use a register to count clock cycles and then do something.
+    You have to use input/output signalling to start operations.
+
+    You can use the #CLOCK shorthand , but I haven't tried this yet. (Simulation only?) 
 
 
-Port connections cannot be mixed ordered and named
-<pre>
-you have a comma at the end of your port declarations - get rid of it
-</pre>
-
-Part-select direction is opposite from prefix index direction
-<pre>
-index your port backwards i.e. [0:10] vs [10:0]
-</pre>
-
-... are lined up in series. Buffers of the same direction cannot be placed in series.
-<pre>
-It's mostly likely that when you generated the DCMs, you selected "External" for "CLKIN Source" and the tool then inserted the global clock input buffer (IBUFG) in the generated DCM code for the both DCMs. The error message basically tells you that a single input can't drive two IBUFGs. You should go back to CoreGen and regenerate the DCM files with "Internal" for "CLKIN" Source
-</pre>
+    D/Q Flop VS simple register.
+    <pre>
+    </pre>
 
 
-Procedural assignment to a non-register bitsy_clk is not permitted
-<pre>
-.. are you trying to using combinatorial assignment in an always block on a WIRE (instead of REG?)
-</pre>
+    //Synchronous clock
+    <pre>
+     always @ ( posedge clk)
+         ... do something ...
+      end
+    </pre>
 
-==<b>Links</b>==
-<pre>
-https://www.altera.com/support/training/curricula.html
-</pre>
+    // Asynchronous clock
+    <pre>
+     always @ ( posedge clk or negedge reset)
+         ... do something ...
+     end 
+    </pre>
+     
+
+    links
+    <pre>
+    http://www.xilinx.com/support/documentation/user_guides/ug382.pdf
+    </pre>
 
 
-If you want to look up wiring go here
-<pre>
-https://embeddedmicro.com/media/wysiwyg/mojo/v3-sch.pdf
-</pre>
+    <pre>
+    clock frequency is 50MHz, or 50,000,000 clock cycles per second. 
+    counter takes 2^25 cycles to overflow we can calculate the blinker time
+    2^25 / 50,000,000 -- on and off every 0.67 seconds.
+    </pre>
 
-Misc Links 
-<pre>
-http://www.fpga4fun.com/
-http://www.physi.uni-heidelberg.de/~angelov/VHDL/VHDL_SS09_Teil10.pdf
-http://www.xilinx.com/support/documentation/data_sheets/ds160.pdf
-http://www.xilinx.com/support/documentation/user_guides/ug384.pdf
-https://embeddedmicro.com/tutorials/mojo-fpga-beginners-guide
-http://www.asic-world.com/verilog/verilog_one_day.html
-https://cseweb.ucsd.edu/classes/sp09/cse141L/Slides/01-Verilog1.pdf
-</pre>
+    ===timing terminology===
+    <pre>
+    IBUFG    - drives a global clock net from an external pin.
+    BUFG     - drives a global clock net from an internal signal. 
+
+    DCM      - design primitive - digital clock manager, an electronic component available on some FPGAs
+    DCM_SP   - design primitive - read the datasheet, good luck kid
+    PLL      - phase locked loop
+    DLL      - delay locked loop
+    </pre>
 
 
 
+    ===Timing Errors===
+
+    <pre>
+    This design contains a global buffer instance,
+       <vclk/clkout1_buf>, driving the net, <led_7_OBUF>, that is driving the
+       following (first 30) non-clock load pins.
+
+    This is not a recommended design practice in Spartan-6 due to limitations in
+       the global routing that may cause excessive delay, skew or unroutable
+       situations.  It is recommended to only use a BUFG resource to drive clock
+       loads. If you wish to override this recommendation, you may use the
+       CLOCK_DEDICATED_ROUTE constraint (given below) in the .ucf file to demote
+       this message to a WARNING and allow your design to continue.
+    </pre>
+
+
+    CLOCK_DEDICATED_ROUTE (for clocking slow pulses)
+    <pre>
+    NET "k4" LOC = P78 | IOSTANDARD = LVCMOS33  | CLOCK_DEDICATED_ROUTE = FALSE;
+    </pre>
+
+    <pre>
+    http://www.xilinx.com/support/documentation/user_guides/ug381.pdf
+    </pre>
+
+    ==<b>Simulation</b>==
+
+    So I guess simulation is really, really important. 
+    6 months in to this, I still haven’t simulated a single thing, I just jumped right into synthesizing actual bitfiles. 
+
+
+    ===Icarus===
+
+    using Icarus Verilog
+    <pre>
+    //From http://iverilog.wikia.com/wiki/Getting_Started
+
+    module main;
+      initial 
+        begin
+          $display("Hello, World");
+          $finish ;
+        end
+    endmodule
+
+    Use a text editor to place the program in a text file, hello.v, then compile this program with the command:
+
+    % iverilog -o hello hello.v
+
+    The results of this compile are placed into the file "hello", because the "-o" flag tells the compiler where to place the compiled result. 
+    Next, execute the compiled program like so:
+
+    % vvp hello
+
+    </pre>
+
+    GTKwave 
+    <pre>
+    in the verilog include 
+
+    $dumpfile("my_file_name)
+    $dumpvars(0,name??)
+
+    $finish
+    </pre>
+
+
+    <pre>
+    iverilog foo.v foo2.v -o simout 
+    vvp simout  #convert to a vcs
+
+    </pre>
+
+    ===Verilator===
+    <pre>
+    Kind of a weird idea. It compiles verilog into C. I think this is for speed and flexibility in simulation. 
+     
+    </pre>
+
+
+    Great place to start
+    <pre>
+    https://www.youtube.com/watch?v=HAQfD35U6-M
+    </pre>
+
+    ==<b>programmer hardware</b>==
+    Xilinx platform cable 
+    <pre>
+    untested because I dont want to drop 300 bucks on a tool that might not even work on linux.
+    I suspect it will, or at least damn well better, but I am too cheap to find out for now
+    I did buy a 30 dollar clone on ebay, and had no luck on linux. On windows the light turned green when hooked to a device but threw a bunch of errors.
+    I read somewhere that it only works on 32 bit systems, so maybe that was the problem
+    </pre>
+
+    FT2232H - SPI/BPI- Flash programming
+    <pre>
+    Hmm, sounds hard. More notes here when I figure it out.
+    </pre>
+
+    Digilent JTAG-HS3
+    Supposedly this thing will solve all my problems. 
+    Drivers come with ISE on linux (I think?)
+    go look at :
+    <pre>
+    https://elinux.org/Install_Xilinx_USB_cable_drivers_for_Ubuntu
+    </pre>
+
+    Basically do this:
+    <pre>
+    cd /<Install Path>/Xilinx/<Version Number>/ISE_DS/common/bin/lin64/digilent
+    sudo ./install_digilent.sh
+    </pre>
+
+    After I did that it recognized my device, so looking good, but I need a damn 2mm pitch JTAG header to plug it in to anything. GGRRRR.
+
+
+    ===Digilent HS3===
+    <pre>
+       GND   |X X| VREF 
+       GND   |X X| TMS
+       GND  _|X X| TCK
+       GND |_|X X| TDO
+       GND   |X X| TDI
+       GND   |X X| -NC
+       GND   |X_X| SRST   
+
+      (looking out of connector)
+    </pre>
+
+
+    ==<b>Permissible stupidities</b>==
+
+    Apparently Verilog just allows things that don’t make any sense, or are confusing:
+
+    <b>Defining a wire in the module parameters that is not in UCF</b>
+    <pre>
+    module mojo_top(
+             output hpin,
+             input RESET  <----- DOES NOT EXIST IN UCF!!
+        );
+    </pre>
+
+    <b> Implicit declaration in module instantiation</b>
+    Similar - defining a wire in a module instantiation that does not exist
+
+    Throws an error:
+    "<px_counter> is already implicitly declared earlier"
+    <pre>
+       sram_io shramio(
+    	    .clk(clk),
+    	    
+    	    //data to interact with sram chip 
+    	    .wren(dir_pin),
+    	    .d(px_counter), <-- does not exist YET  
+      	    .q(data_intermed),
+    	    .address(px_counter)
+       );
+        reg [9:0] px_counter = 10'b0;
+    </pre>
+
+    Totally valid, however: 
+    <pre>
+        reg [9:0] px_counter = 10'b0;	
+        sram_io shramio(
+    	    .clk(clk),
+    	    
+    	    //data to interact with sram chip 
+    	    .wren(dir_pin),
+    	    .d(px_counter), <-- does not exist YET  
+      	    .q(data_intermed),
+    	    .address(px_counter)
+       );
+
+    </pre>
+
+
+    <b>Simulation Errors</b>
+    <pre>
+        System task finish is always executed
+    </pre>
+
+    <h3><b>Error Reference</b></h3>
+
+    <XXX> is already implicitly declared earlier.
+    <pre>
+    the order you declare things matters. Something prior to this has defined the object
+    </pre>
+
+
+    No support for synthesis of mixed edge and level triggers
+    <pre>
+        dont mix data in an always block with with data in a sensitivity list  
+    </pre>
+
+    is sourced by a combinatorial pin. This is not good design practice. Use the CE pin to
+    control the loading of data into the flip-flop.
+
+    <pre>
+     signal is the output from a flip flop, rather than a nice clean external clock signal, the tools are warning you ???
+    </pre>
+
+
+    concurrent assignment or output port connection should be a net type
+    <pre>
+    you cannot drive a reg type via a continuous assignment (only a wire may be driven in this way)
+    </pre>
+
+
+    Non-net port out_byte cannot be of mode input
+    <pre>
+    dont declare your input as a reg 
+    </pre>
+
+
+    Port connections cannot be mixed ordered and named
+    <pre>
+        you have a comma at the end of your port declarations - get rid of it
+    </pre>
+
+    Part-select direction is opposite from prefix index direction
+    <pre>
+        index your port backwards i.e. [0:10] vs [10:0]
+    </pre>
+
+    ... are lined up in series. Buffers of the same direction cannot be placed in series.
+    <pre>
+        It's mostly likely that when you generated the DCMs, you selected "External" for "CLKIN Source" and the tool 
+        then inserted the global clock input buffer (IBUFG) in the generated DCM code for the both DCMs. 
+        The error message basically tells you that a single input can't drive two IBUFGs. You should go back to 
+        CoreGen and regenerate the DCM files with "Internal" for "CLKIN" Source
+    </pre>
+
+
+    Procedural assignment to a non-register bitsy_clk is not permitted
+    <pre>
+    .. are you trying to using combinatorial assignment in an always block on a WIRE (instead of REG?)
+    </pre>
+
+    
+    <b>Links</b>
+
+    <pre>
+        https://www.altera.com/support/training/curricula.html
+    </pre>
+
+
+    If you want to look up wiring go here
+    <pre>
+        https://embeddedmicro.com/media/wysiwyg/mojo/v3-sch.pdf
+    </pre>
+
+    Misc Links 
+    <pre>
+        http://www.fpga4fun.com/
+        http://www.physi.uni-heidelberg.de/~angelov/VHDL/VHDL_SS09_Teil10.pdf
+        http://www.xilinx.com/support/documentation/data_sheets/ds160.pdf
+        http://www.xilinx.com/support/documentation/user_guides/ug384.pdf
+        https://embeddedmicro.com/tutorials/mojo-fpga-beginners-guide
+        http://www.asic-world.com/verilog/verilog_one_day.html
+        https://cseweb.ucsd.edu/classes/sp09/cse141L/Slides/01-Verilog1.pdf
+    </pre>
+
+
+
+</html>
